@@ -13,7 +13,6 @@ export const fragmentShader = `
   uniform float u_time;
   uniform vec2 u_mouse;
   uniform vec2 u_resolution;
-  uniform int u_pattern;
   varying vec2 v_uv;
 
   float random(vec2 st) {
@@ -57,38 +56,11 @@ export const fragmentShader = `
       
       vec3 color1 = vec3(0.1);    // dark gray
       vec3 color2 = vec3(0.0);    // black
-      vec3 finalColor;
 
-      if (u_pattern == 0) {
-          // Original pattern
-          finalColor = mix(color1, color2, n);
-      } 
-      else if (u_pattern == 1) {
-          // Dithering
-          float dither = random(gl_FragCoord.xy / 2.0);
-          float pattern = step(dither, n);
-          finalColor = mix(color1, color2, pattern);
-      }
-      else if (u_pattern == 2) {
-          // Dot pattern
-          vec2 center = fract(uv * 20.0) - 0.5;
-          float dots = length(center);
-          dots = 1.0 - smoothstep(0.1 + n * 0.2, 0.11 + n * 0.2, dots);
-          finalColor = mix(color2, color1, dots);
-      }
-      else if (u_pattern == 3) {
-          // Line pattern
-          float lines = sin(uv.x * 50.0 + n * 10.0) * sin(uv.y * 50.0 + n * 10.0);
-          lines = smoothstep(0.0, 0.1, abs(lines));
-          finalColor = mix(color1, color2, lines);
-      }
-      else if (u_pattern == 4) {
-          // Cellular pattern
-          vec2 cell = fract(uv * 8.0) - 0.5;
-          float cells = length(cell);
-          cells = smoothstep(0.4 + n * 0.2, 0.41 + n * 0.2, cells);
-          finalColor = mix(color1, color2, cells);
-      }
+      // Dithering pattern
+      float dither = random(gl_FragCoord.xy / 2.0);
+      float pattern = step(dither, n);
+      vec3 finalColor = mix(color1, color2, pattern);
       
       gl_FragColor = vec4(finalColor, 1.0);
   }
