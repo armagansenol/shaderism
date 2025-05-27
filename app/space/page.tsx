@@ -115,6 +115,22 @@ export default function SpacePage() {
     }
   }, [])
 
+  // Effect to handle page scroll lock during intro animation
+  useEffect(() => {
+    if (!introAnimationComplete) {
+      // Animation has not completed (this covers initial state and during animation)
+      document.body.style.overflow = "hidden"
+    } else {
+      // Animation has completed, unlock scroll
+      document.body.style.overflow = "auto"
+    }
+
+    // Cleanup function to ensure scrolling is restored if component unmounts
+    return () => {
+      document.body.style.overflow = "auto"
+    }
+  }, [introAnimationComplete]) // Depend only on introAnimationComplete
+
   const handleEnterClick = () => {
     setStartIntroAnimation(true)
     setIntroAnimationComplete(false) // Reset completion state if animation is re-triggered
@@ -128,47 +144,94 @@ export default function SpacePage() {
   const showButton = !startIntroAnimation
 
   return (
-    <div style={{ height: "100vh", width: "100vw", backgroundColor: "black", position: "relative" }}>
-      {showButton && (
-        <button
-          onClick={handleEnterClick}
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            fontSize: "16px",
-            color: "#fff",
-            border: "none",
-            borderRadius: "5px",
-            backgroundColor: "transparent",
-            cursor: "pointer",
-            zIndex: 10, // Ensure button is on top of the canvas
-          }}
-        >
-          ENTER
-        </button>
-      )}
-      <Canvas style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }}>
-        <AnimatedCamera
-          startAnimation={startIntroAnimation}
-          onAnimationComplete={handleIntroAnimationComplete}
-          screenWidth={screenWidth} // Pass screenWidth to AnimatedCamera
-        />
-        {/* <OrthographicCamera makeDefault position={[0, 0, -50]} zoom={3} near={0.1} far={600} /> */}
-        {/* <PerspectiveCamera makeDefault position={[0, 0, -50]} zoom={3} near={0.1} far={600} /> */}
-        <color attach="background" args={["black"]} />
-        <ambientLight intensity={2} />
-        <EffectComposer>
-          <Starfield />
-          <GridPlane />
-          <ModelBytemywork color="#fff" scale={modelScale} />
-          <Bloom intensity={0.4} luminanceThreshold={0.05} luminanceSmoothing={0.2} mipmapBlur={true} kernelSize={3} />
-        </EffectComposer>
-        {/* OrbitControls are enabled only after the intro animation is complete */}
-        <OrbitControls enableZoom={true} enablePan={true} enabled={introAnimationComplete} />
-        <Stats />
-      </Canvas>
-    </div>
+    <>
+      <div style={{ height: "100vh", width: "100vw", backgroundColor: "black", position: "relative" }}>
+        {showButton && (
+          <button
+            onClick={handleEnterClick}
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              fontSize: "16px",
+              color: "#fff",
+              border: "none",
+              borderRadius: "5px",
+              backgroundColor: "transparent",
+              cursor: "pointer",
+              zIndex: 10, // Ensure button is on top of the canvas
+            }}
+          >
+            ENTER
+          </button>
+        )}
+        <Canvas style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }}>
+          <AnimatedCamera
+            startAnimation={startIntroAnimation}
+            onAnimationComplete={handleIntroAnimationComplete}
+            screenWidth={screenWidth} // Pass screenWidth to AnimatedCamera
+          />
+          {/* <OrthographicCamera makeDefault position={[0, 0, -50]} zoom={3} near={0.1} far={600} /> */}
+          {/* <PerspectiveCamera makeDefault position={[0, 0, -50]} zoom={3} near={0.1} far={600} /> */}
+          <color attach="background" args={["black"]} />
+          <ambientLight intensity={2} />
+          <EffectComposer>
+            <Starfield />
+            <GridPlane />
+            <ModelBytemywork color="#fff" scale={modelScale} />
+            <Bloom
+              intensity={0.4}
+              luminanceThreshold={0.05}
+              luminanceSmoothing={0.2}
+              mipmapBlur={true}
+              kernelSize={3}
+            />
+          </EffectComposer>
+          {/* OrbitControls are disabled to allow page scrolling after intro animation */}
+          <OrbitControls enableZoom={true} enablePan={true} enabled={false} />
+          <Stats />
+        </Canvas>
+      </div>
+      <div
+        style={{
+          height: "100vh",
+          width: "100vw",
+          backgroundColor: "black",
+          position: "relative",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <div>SECTION 1</div>
+      </div>
+      <div
+        style={{
+          height: "100vh",
+          width: "100vw",
+          backgroundColor: "black",
+          position: "relative",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <div>SECTION 2</div>
+      </div>
+      <div
+        style={{
+          height: "100vh",
+          width: "100vw",
+          backgroundColor: "black",
+          position: "relative",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <div>FOOTER</div>
+      </div>
+    </>
   )
 }
