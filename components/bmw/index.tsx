@@ -9,8 +9,8 @@ type GLTFResult = GLTF & {
   }
 }
 
-export function ModelBytemywork(props: Record<string, unknown>) {
-  const { color = "#ffffff", ...restProps } = props
+export function ModelBytemywork(props: Record<string, unknown> & { scale?: number }) {
+  const { color = "#ffffff", scale = 1, ...restProps } = props
   const { nodes } = useGLTF("/glb/bmw.glb") as unknown as GLTFResult
 
   return (
@@ -21,7 +21,7 @@ export function ModelBytemywork(props: Record<string, unknown>) {
         geometry={nodes.Curve002.geometry}
         material={nodes.Curve002.material}
         rotation={[Math.PI / 2, 0, 0]}
-        scale={[200, 0.1, 200]}
+        scale={[200 * scale, 0.1 * scale, 200 * scale]}
       >
         <meshStandardMaterial color={color as THREE.ColorRepresentation} metalness={0.2} roughness={0.75} />
       </mesh>

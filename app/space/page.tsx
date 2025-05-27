@@ -21,9 +21,11 @@ function easeInOutExpo(x: number): number {
 function AnimatedCamera({
   startAnimation,
   onAnimationComplete,
+  screenWidth,
 }: {
   startAnimation: boolean
   onAnimationComplete: () => void
+  screenWidth: number
 }) {
   const cameraRef = useRef<THREE.PerspectiveCamera>(null!)
 
@@ -37,6 +39,9 @@ function AnimatedCamera({
   const tProgressRef = useRef(0) // Animation progress 't' from 0 to 1
   const animationCompletedSignaledRef = useRef(false) // To signal completion only once
   const lookAtTarget = useRef(new THREE.Vector3(0, 0, 0)).current // Constant lookAt target
+
+  // Determine FOV based on screen width
+  const fov = screenWidth < 768 ? 45 : 75 // Example: 45 FOV for mobile, 75 for desktop
 
   useEffect(() => {
     if (cameraRef.current) {
@@ -88,13 +93,27 @@ function AnimatedCamera({
     }
   })
 
-  return <PerspectiveCamera ref={cameraRef} makeDefault fov={75} near={0.1} far={600} />
+  return <PerspectiveCamera ref={cameraRef} makeDefault fov={fov} near={0.1} far={600} />
 }
 
 export default function SpacePage() {
   // Renamed state for clarity and added animation completion state
   const [startIntroAnimation, setStartIntroAnimation] = useState(false)
   const [introAnimationComplete, setIntroAnimationComplete] = useState(false)
+  const [screenWidth, setScreenWidth] = useState(0) // Added screenWidth state
+
+  // Calculate model scale based on screen width
+  const modelScale = screenWidth < 768 ? 0.175 : 1 // Example: smaller scale for mobile
+
+  useEffect(() => {
+    // Set initial screen width and add resize listener
+    if (typeof window !== "undefined") {
+      setScreenWidth(window.innerWidth)
+      const handleResize = () => setScreenWidth(window.innerWidth)
+      window.addEventListener("resize", handleResize)
+      return () => window.removeEventListener("resize", handleResize)
+    }
+  }, [])
 
   const handleEnterClick = () => {
     setStartIntroAnimation(true)
@@ -131,7 +150,11 @@ export default function SpacePage() {
         </button>
       )}
       <Canvas style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }}>
-        <AnimatedCamera startAnimation={startIntroAnimation} onAnimationComplete={handleIntroAnimationComplete} />
+        <AnimatedCamera
+          startAnimation={startIntroAnimation}
+          onAnimationComplete={handleIntroAnimationComplete}
+          screenWidth={screenWidth} // Pass screenWidth to AnimatedCamera
+        />
         {/* <OrthographicCamera makeDefault position={[0, 0, -50]} zoom={3} near={0.1} far={600} /> */}
         {/* <PerspectiveCamera makeDefault position={[0, 0, -50]} zoom={3} near={0.1} far={600} /> */}
         <color attach="background" args={["black"]} />
@@ -139,7 +162,7 @@ export default function SpacePage() {
         <EffectComposer>
           <Starfield />
           <GridPlane />
-          <ModelBytemywork color="#fff" />
+          <ModelBytemywork color="#fff" scale={modelScale} />
           <Bloom intensity={0.4} luminanceThreshold={0.05} luminanceSmoothing={0.2} mipmapBlur={true} kernelSize={3} />
         </EffectComposer>
         {/* OrbitControls are enabled only after the intro animation is complete */}
