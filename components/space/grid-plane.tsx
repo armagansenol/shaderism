@@ -14,7 +14,6 @@ const GridPlane = () => {
   const { scene, camera } = useThree()
 
   const [normalSampler1, setNormalSampler1] = useState<THREE.Texture | null>(null)
-  const [isVortexActive, setIsVortexActive] = useState(false) // false for flat grid, true for vortex
   const [boundingSphere, setBoundingSphere] = useState<THREE.Sphere | null>(null)
 
   useEffect(() => {
@@ -34,15 +33,13 @@ const GridPlane = () => {
       alpha: 1.0,
       lineThickness: 0.008, // Adjusted for cylinder view
       lineFade: 0.004, // Adjusted for cylinder view
-      gridDensity: 15.0, // Flat grid density ( circumferential lines on cylinder)
+      gridDensity: 15.0, // Flat grid density (lines along cylinder length)
+      numCircumferentialLines: 24.0, // New: for lines around circumference
       animationSpeed: 1.0,
-      // Vortex params
-      numRadialLines: 24.0, // Lines around circumference
-      numConcentricLines: 8.0, // Rings along length
-      vortexTwistFactor: 1.5, // Increased for more twist
-      vortexEndFadeStart: 0.7, // Start fading the far end of the vortex (0 = start of tube, 1 = far end)
-      vortexEndFadeLength: 0.3, // Length of the fade at the far end
-      vortexOpeningFade: 0.1, // Fade near the camera opening
+      // New general cylinder fading params
+      cylinderEndFadeStart: 0.7,
+      cylinderEndFadeLength: 0.3,
+      cylinderOpeningFade: 0.1,
     }),
     []
   )
@@ -50,7 +47,6 @@ const GridPlane = () => {
   const uniforms = useMemo(
     () => ({
       normalSampler1: { value: null },
-      uVortexTransition: { value: 0.0 }, // 0: flat grid, 1: vortex
       time: { value: 0.0 },
       size: { value: initialParams.size },
       uGridColor: { value: initialParams.gridColor.clone() },
@@ -60,12 +56,11 @@ const GridPlane = () => {
       uLineFade: { value: initialParams.lineFade },
       uGridDensity: { value: initialParams.gridDensity },
       uAnimationSpeed: { value: initialParams.animationSpeed },
-      uNumRadialLines: { value: initialParams.numRadialLines },
-      uNumConcentricLines: { value: initialParams.numConcentricLines },
-      uVortexTwistFactor: { value: initialParams.vortexTwistFactor },
-      uVortexEndFadeStart: { value: initialParams.vortexEndFadeStart },
-      uVortexEndFadeLength: { value: initialParams.vortexEndFadeLength },
-      uVortexOpeningFade: { value: initialParams.vortexOpeningFade },
+      uNumCircumferentialLines: { value: initialParams.numCircumferentialLines },
+      // New general cylinder fading uniforms
+      uCylinderEndFadeStart: { value: initialParams.cylinderEndFadeStart },
+      uCylinderEndFadeLength: { value: initialParams.cylinderEndFadeLength },
+      uCylinderOpeningFade: { value: initialParams.cylinderOpeningFade },
     }),
     [initialParams]
   )
@@ -107,9 +102,6 @@ const GridPlane = () => {
             lineThickness: initialParams.lineThickness,
             lineFade: initialParams.lineFade,
             animationSpeed: initialParams.animationSpeed,
-            toggleVortex: () => {
-              setIsVortexActive((prev) => !prev)
-            },
           }
 
           guiFolder.addColor(guiParams, "gridColor").onChange((value: string) => {
@@ -153,40 +145,32 @@ const GridPlane = () => {
             .onChange((value: number) => {
               materialRef.current.uniforms.uGridDensity.value = value
             })
-
-          const vortexFolder = guiFolder.addFolder("Vortex Grid (Cylinder)")
-          vortexFolder.add(initialParams, "numRadialLines", 5.0, 100.0, 1.0).onChange((value: number) => {
-            materialRef.current.uniforms.uNumRadialLines.value = value
-          })
-          vortexFolder
-            .add(initialParams, "numConcentricLines", 5.0, 50.0, 1.0)
-            .name("Rings Along Length")
+          flatGridFolder
+            .add(initialParams, "numCircumferentialLines", 5.0, 100.0, 1.0)
+            .name("Circumferential Lines")
             .onChange((value: number) => {
-              materialRef.current.uniforms.uNumConcentricLines.value = value
+              materialRef.current.uniforms.uNumCircumferentialLines.value = value
             })
-          vortexFolder.add(initialParams, "vortexTwistFactor", 0.0, 5.0, 0.01).onChange((value: number) => {
-            materialRef.current.uniforms.uVortexTwistFactor.value = value
-          })
-          vortexFolder
-            .add(initialParams, "vortexEndFadeStart", 0.0, 1.0, 0.01)
-            .name("Far End Fade Start (0-1)")
+          // Add GUI controls for new fading parameters
+          flatGridFolder
+            .add(initialParams, "cylinderOpeningFade", 0.0, 0.5, 0.01)
+            .name("Near End Fade")
             .onChange((value: number) => {
-              materialRef.current.uniforms.uVortexEndFadeStart.value = value
+              materialRef.current.uniforms.uCylinderOpeningFade.value = value
             })
-          vortexFolder
-            .add(initialParams, "vortexEndFadeLength", 0.0, 1.0, 0.01)
+          flatGridFolder
+            .add(initialParams, "cylinderEndFadeStart", 0.0, 1.0, 0.01)
+            .name("Far End Fade Start")
+            .onChange((value: number) => {
+              materialRef.current.uniforms.uCylinderEndFadeStart.value = value
+            })
+          flatGridFolder
+            .add(initialParams, "cylinderEndFadeLength", 0.0, 1.0, 0.01)
             .name("Far End Fade Length")
             .onChange((value: number) => {
-              materialRef.current.uniforms.uVortexEndFadeLength.value = value
-            })
-          vortexFolder
-            .add(initialParams, "vortexOpeningFade", 0.0, 0.5, 0.01)
-            .name("Near End Fade (0-1)")
-            .onChange((value: number) => {
-              materialRef.current.uniforms.uVortexOpeningFade.value = value
+              materialRef.current.uniforms.uCylinderEndFadeLength.value = value
             })
 
-          guiFolder.add(guiParams, "toggleVortex").name("Toggle Vortex Mode")
           guiFolder.open()
 
           if (gui.domElement) {
@@ -212,7 +196,7 @@ const GridPlane = () => {
       // This might be tricky if gui is only defined in the promise scope.
       // A common pattern is to use a ref to store the gui instance.
     }
-  }, [initialParams, setIsVortexActive]) // Added setIsVortexActive back as it's used in toggleVortex
+  }, [initialParams]) // Removed setIsVortexActive from dependencies
 
   useFrame(({ clock }) => {
     if (!materialRef.current || !normalSampler1 || !meshRef.current || !boundingSphere) return
@@ -231,17 +215,6 @@ const GridPlane = () => {
 
     const effectiveTime = clock.getElapsedTime() * materialRef.current.uniforms.uAnimationSpeed.value
     materialRef.current.uniforms.time.value = effectiveTime
-
-    const currentVortexTransition = materialRef.current.uniforms.uVortexTransition.value
-    const targetVortexTransitionValue = isVortexActive ? 1.0 : 0.0
-    const transitionSpeed = 0.03
-
-    if (Math.abs(currentVortexTransition - targetVortexTransitionValue) > 0.001) {
-      materialRef.current.uniforms.uVortexTransition.value +=
-        (targetVortexTransitionValue - currentVortexTransition) * transitionSpeed
-    } else {
-      materialRef.current.uniforms.uVortexTransition.value = targetVortexTransitionValue
-    }
   })
 
   const vertexShader = `
@@ -274,14 +247,12 @@ const GridPlane = () => {
     uniform float uLineThickness;
     uniform float uLineFade;
     uniform float uGridDensity; // For flat grid mode (lines along cylinder length)
+    uniform float uNumCircumferentialLines; // New: for lines around circumference
     
-    uniform float uVortexTransition; // 0: flat, 1: vortex
-    uniform float uNumRadialLines;   // Lines around circumference in vortex
-    uniform float uNumConcentricLines; // Rings along length in vortex
-    uniform float uVortexTwistFactor;
-    uniform float uVortexEndFadeStart; // Start of fade at the far end (0-1 along length)
-    uniform float uVortexEndFadeLength; // Length of fade at far end
-    uniform float uVortexOpeningFade; // Fade at the near end (0-1 along length)
+    // New general cylinder fading uniforms
+    uniform float uCylinderEndFadeStart;
+    uniform float uCylinderEndFadeLength;
+    uniform float uCylinderOpeningFade;
 
     varying vec2 vUv; // u: circumference, v: length
     varying vec3 vWorldPosition;
@@ -324,50 +295,24 @@ const GridPlane = () => {
 
       // Lines along the length (controlled by uGridDensity)
       float linesLengthwise = line(fract(displacedUv.y * uGridDensity), uLineThickness, uLineFade);
-      // Lines around the circumference (can use uNumRadialLines or a new density param)
-      float linesCircumferential = line(fract(displacedUv.x * uNumRadialLines), uLineThickness, uLineFade);
+      // Lines around the circumference (controlled by uNumCircumferentialLines)
+      float linesCircumferential = line(fract(displacedUv.x * uNumCircumferentialLines), uLineThickness, uLineFade);
       
       float grid = max(linesLengthwise, linesCircumferential);
 
-      // Fade along the length of the cylinder (original vUv.y for consistent fade end)
-      float fadeOut = 1.0 - smoothstep(uVortexEndFadeStart, uVortexEndFadeStart + uVortexEndFadeLength, uv.y);
-      float fadeIn = smoothstep(0.0, uVortexOpeningFade, uv.y); // Fade in at the start of the tube
+      // Fade along the length of the cylinder using new general uniforms
+      float fadeOut = 1.0 - smoothstep(uCylinderEndFadeStart, uCylinderEndFadeStart + uCylinderEndFadeLength, uv.y);
+      float fadeIn = smoothstep(0.0, uCylinderOpeningFade, uv.y);
 
       return uGridColor * grid * fadeOut * fadeIn;
-    }
-
-    vec3 renderVortexOnCylinder(vec2 uv, vec3 worldPos) {
-      float angle_uv = uv.x; // 0-1, angle around cylinder
-      float dist_uv = uv.y;  // 0-1, distance along cylinder length
-
-      // Apply twist: twist increases with distance along the tube
-      float twisted_angle_uv = angle_uv + dist_uv * uVortexTwistFactor * (0.5 + uVortexTransition * 0.5); 
-      // Add time-based rotation to the vortex itself
-      twisted_angle_uv += time * 0.05 * uVortexTwistFactor;
-
-      float radialLines = line(fract(twisted_angle_uv * uNumRadialLines), uLineThickness, uLineFade);
-      // Concentric lines are now rings along the length of the tube
-      float concentricRings = line(fract(dist_uv * uNumConcentricLines), uLineThickness, uLineFade);
-      
-      float grid = max(radialLines, concentricRings);
-
-      // Fade the far end of the vortex to create the "hole"
-      float endFade = 1.0 - smoothstep(uVortexEndFadeStart, uVortexEndFadeStart + uVortexEndFadeLength, dist_uv);
-      // Fade the opening near the camera as well, to soften the entrance
-      float openingFade = smoothstep(0.0, uVortexOpeningFade, dist_uv);
-      
-      return uGridColor * grid * endFade * openingFade;
     }
 
     void main() {
       #include <logdepthbuf_fragment>
 
       vec3 wavyCylinderColor = renderWavyCylinderGrid(vUv, vWorldPosition);
-      vec3 vortexCylinderColor = renderVortexOnCylinder(vUv, vWorldPosition);
-
-      vec3 finalColor = mix(wavyCylinderColor, vortexCylinderColor, uVortexTransition);
       
-      gl_FragColor = vec4(finalColor, alpha);
+      gl_FragColor = vec4(wavyCylinderColor, alpha);
 
       #include <fog_fragment>
     }

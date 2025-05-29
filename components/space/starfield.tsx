@@ -7,9 +7,9 @@ const Starfield = () => {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null!)
   const shaderRef = useRef<THREE.ShaderMaterial>(null!)
 
-  const count = 1000
+  const count = 500
   const minRadius = 20
-  const maxRadius = 300
+  const maxRadius = 100
 
   const instanceData = useMemo(() => {
     const data = []
@@ -27,6 +27,7 @@ const Starfield = () => {
         colorUv: Math.random(),
         brightness: Math.random() * 1.5 + 0.5,
         size: Math.random() * 1.5 + 0.5,
+        randomSeed: Math.random(),
       })
     }
     if (data.length > 0) {
@@ -47,21 +48,25 @@ const Starfield = () => {
     const sizes = new Float32Array(count)
     const colorUvs = new Float32Array(count)
     const brightnesses = new Float32Array(count)
+    const randomSeeds = new Float32Array(count)
 
     for (let i = 0; i < count; i++) {
       sizes[i] = instanceData[i].size
       colorUvs[i] = instanceData[i].colorUv
       brightnesses[i] = instanceData[i].brightness
+      randomSeeds[i] = instanceData[i].randomSeed
     }
 
     mesh.geometry.setAttribute("instanceSize", new THREE.InstancedBufferAttribute(sizes, 1))
     mesh.geometry.setAttribute("instanceColorUv", new THREE.InstancedBufferAttribute(colorUvs, 1))
     mesh.geometry.setAttribute("instanceBrightness", new THREE.InstancedBufferAttribute(brightnesses, 1))
+    mesh.geometry.setAttribute("instanceRandomSeed", new THREE.InstancedBufferAttribute(randomSeeds, 1))
 
     // Mark attributes for update
     if (mesh.geometry.attributes.instanceSize) mesh.geometry.attributes.instanceSize.needsUpdate = true
     if (mesh.geometry.attributes.instanceColorUv) mesh.geometry.attributes.instanceColorUv.needsUpdate = true
     if (mesh.geometry.attributes.instanceBrightness) mesh.geometry.attributes.instanceBrightness.needsUpdate = true
+    if (mesh.geometry.attributes.instanceRandomSeed) mesh.geometry.attributes.instanceRandomSeed.needsUpdate = true
     // Also mark the instance matrix buffer for update, as positions are handled by <Instance>
     // but ensuring its updates are processed is key.
     if (mesh.instanceMatrix) mesh.instanceMatrix.needsUpdate = true
@@ -85,15 +90,18 @@ const Starfield = () => {
       attribute float instanceSize;
       attribute float instanceColorUv;
       attribute float instanceBrightness;
+      attribute float instanceRandomSeed;
       
       varying vec2 vUv;
       varying float vColorUv;
       varying float vBrightness;
+      varying float vRandomSeed;
   
       void main() {
         vUv = uv;
         vColorUv = instanceColorUv;
         vBrightness = instanceBrightness;
+        vRandomSeed = instanceRandomSeed;
   
         // instanceMatrix will position/rotate/scale the entire plane.
         // 'position' is the vertex of the base PlaneGeometry.
@@ -111,11 +119,22 @@ const Starfield = () => {
       varying vec2 vUv;
       varying float vColorUv;
       varying float vBrightness;
+      varying float vRandomSeed;
   
+      float rand(vec2 co){
+          return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+      }
+
       void main() {
-        // Blinking effect based on brightness and time
-        float blink = sin(uTime * vBrightness * 0.8 + vBrightness * 3.0) * 0.3 + 0.7;
-        float modulatedBrightness = clamp(vBrightness * blink, 0.1, 1.5);
+        // Simplified blinking logic for diagnostics
+        float phaseOffset = vRandomSeed * 6.28318; // Offset phase by 0 to 2*PI based on seed
+        float baseFrequency = 1.5; // A moderate, visible blinking speed
+        float sineWave = sin(uTime * baseFrequency + phaseOffset);
+        
+        // Make blink go from 0.0 to 1.0 of its potential brightness
+        float blinkFactor = (sineWave * 0.5) + 0.5; // Results in a range of 0.0 to 1.0
+
+        float modulatedBrightness = clamp(vBrightness * blinkFactor, 0.0, 1.5); // Allow brightness to go to 0.0
 
         vec4 tex = texture2D(pointTexture, vUv); // Use vUv for texturing the plane
         if (tex.a < 0.1) {
