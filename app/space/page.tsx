@@ -4,7 +4,7 @@ import { ModelBytemywork } from "@/components/bmw"
 import { GridPlane } from "@/components/space/grid-plane"
 import { Starfield } from "@/components/space/starfield"
 // import { ModelBytemywork } from "@/components/bmw" // Commented out as it's not used in simplified version
-import { PerspectiveCamera as DreiPerspectiveCamera, Stats } from "@react-three/drei"
+import { AdaptiveDpr, PerspectiveCamera as DreiPerspectiveCamera, Stats } from "@react-three/drei"
 import { Canvas, useFrame } from "@react-three/fiber"
 import { Bloom, EffectComposer } from "@react-three/postprocessing"
 import { useLenis } from "lenis/react"
@@ -250,6 +250,7 @@ export default function SpacePage() {
             />
           </EffectComposer>
           <Stats />
+          <AdaptiveDpr pixelated />
         </Canvas>
       </div>
       <div className="h-screen w-screen bg-black">SECTION 1</div>
