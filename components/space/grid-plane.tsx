@@ -11,10 +11,11 @@ const GridPlane = () => {
   const meshRef = useRef<THREE.Mesh>(null!)
   const materialRef = useRef<THREE.ShaderMaterial>(null!)
 
-  const { scene } = useThree()
+  const { scene, camera } = useThree()
 
   const [normalSampler1, setNormalSampler1] = useState<THREE.Texture | null>(null)
   const [isVortexActive, setIsVortexActive] = useState(false) // false for flat grid, true for vortex
+  const [boundingSphere, setBoundingSphere] = useState<THREE.Sphere | null>(null)
 
   useEffect(() => {
     const textureLoader = new THREE.TextureLoader()
@@ -68,6 +69,18 @@ const GridPlane = () => {
     }),
     [initialParams]
   )
+
+  const frustum = useMemo(() => new THREE.Frustum(), [])
+  const projScreenMatrix = useMemo(() => new THREE.Matrix4(), [])
+
+  useEffect(() => {
+    if (meshRef.current) {
+      meshRef.current.geometry.computeBoundingSphere()
+      if (meshRef.current.geometry.boundingSphere) {
+        setBoundingSphere(meshRef.current.geometry.boundingSphere.clone())
+      }
+    }
+  }, []) // Compute once after mount
 
   useEffect(() => {
     if (materialRef.current && normalSampler1) {
@@ -202,7 +215,20 @@ const GridPlane = () => {
   }, [initialParams, setIsVortexActive]) // Added setIsVortexActive back as it's used in toggleVortex
 
   useFrame(({ clock }) => {
-    if (!materialRef.current || !normalSampler1) return
+    if (!materialRef.current || !normalSampler1 || !meshRef.current || !boundingSphere) return
+
+    // Frustum culling check
+    camera.updateMatrixWorld()
+    projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    frustum.setFromProjectionMatrix(projScreenMatrix)
+
+    // We need to apply the mesh's world matrix to its bounding sphere
+    const worldSphere = boundingSphere.clone().applyMatrix4(meshRef.current.matrixWorld)
+
+    if (!frustum.intersectsSphere(worldSphere)) {
+      return // Skip updates if not visible
+    }
+
     const effectiveTime = clock.getElapsedTime() * materialRef.current.uniforms.uAnimationSpeed.value
     materialRef.current.uniforms.time.value = effectiveTime
 

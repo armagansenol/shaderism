@@ -1,21 +1,18 @@
-import React, { useRef, useMemo } from "react"
+import React, { useRef, useMemo, useEffect } from "react"
 import { useFrame } from "@react-three/fiber"
 import * as THREE from "three"
+import { Instances, Instance } from "@react-three/drei"
 
 const Starfield = () => {
-  const pointsRef = useRef<THREE.Points>(null!)
+  const instancedMeshRef = useRef<THREE.InstancedMesh>(null!)
   const shaderRef = useRef<THREE.ShaderMaterial>(null!)
 
-  const count = 10000
-  const minRadius = 50
-  const maxRadius = 1000
+  const count = 1000
+  const minRadius = 20
+  const maxRadius = 300
 
-  const { positions, colorUVs, brightnessFactors, sizes } = useMemo(() => {
-    const pos = new Float32Array(count * 3)
-    const clrUVs = new Float32Array(count)
-    const brghtFactors = new Float32Array(count)
-    const sz = new Float32Array(count)
-
+  const instanceData = useMemo(() => {
+    const data = []
     for (let i = 0; i < count; i++) {
       let x, y, z, d
       do {
@@ -25,21 +22,57 @@ const Starfield = () => {
         d = Math.sqrt(x * x + y * y + z * z)
       } while (d > maxRadius || d < minRadius)
 
-      pos[i * 3 + 0] = x
-      pos[i * 3 + 1] = y
-      pos[i * 3 + 2] = z
-
-      clrUVs[i] = Math.random()
-      brghtFactors[i] = Math.random() * 1.5 + 0.5
-      sz[i] = Math.random() * 1.5 + 0.5
+      data.push({
+        position: new THREE.Vector3(x, y, z),
+        colorUv: Math.random(),
+        brightness: Math.random() * 1.5 + 0.5,
+        size: Math.random() * 1.5 + 0.5,
+      })
     }
-    return {
-      positions: new THREE.BufferAttribute(pos, 3),
-      colorUVs: new THREE.BufferAttribute(clrUVs, 1),
-      brightnessFactors: new THREE.BufferAttribute(brghtFactors, 1),
-      sizes: new THREE.BufferAttribute(sz, 1),
+    if (data.length > 0) {
+      console.log("First star instance data:", JSON.stringify(data[0]))
     }
+    return data
   }, [count, minRadius, maxRadius])
+
+  useEffect(() => {
+    if (!instancedMeshRef.current || !instanceData.length) return
+
+    const mesh = instancedMeshRef.current
+    if (!mesh.geometry) {
+      console.warn("InstancedMesh geometry not found during attribute setup.")
+      return
+    }
+
+    const sizes = new Float32Array(count)
+    const colorUvs = new Float32Array(count)
+    const brightnesses = new Float32Array(count)
+
+    for (let i = 0; i < count; i++) {
+      sizes[i] = instanceData[i].size
+      colorUvs[i] = instanceData[i].colorUv
+      brightnesses[i] = instanceData[i].brightness
+    }
+
+    mesh.geometry.setAttribute("instanceSize", new THREE.InstancedBufferAttribute(sizes, 1))
+    mesh.geometry.setAttribute("instanceColorUv", new THREE.InstancedBufferAttribute(colorUvs, 1))
+    mesh.geometry.setAttribute("instanceBrightness", new THREE.InstancedBufferAttribute(brightnesses, 1))
+
+    // Mark attributes for update
+    if (mesh.geometry.attributes.instanceSize) mesh.geometry.attributes.instanceSize.needsUpdate = true
+    if (mesh.geometry.attributes.instanceColorUv) mesh.geometry.attributes.instanceColorUv.needsUpdate = true
+    if (mesh.geometry.attributes.instanceBrightness) mesh.geometry.attributes.instanceBrightness.needsUpdate = true
+    // Also mark the instance matrix buffer for update, as positions are handled by <Instance>
+    // but ensuring its updates are processed is key.
+    if (mesh.instanceMatrix) mesh.instanceMatrix.needsUpdate = true
+  }, [instanceData, count])
+
+  useEffect(() => {
+    // Log the instanced mesh object once it's available
+    if (instancedMeshRef.current) {
+      console.log("Starfield InstancedMesh ref:", instancedMeshRef.current)
+    }
+  }, []) // Empty dependency array to run once on mount
 
   useFrame(({ clock }) => {
     if (shaderRef.current) {
@@ -49,60 +82,79 @@ const Starfield = () => {
 
   const vertexShader = `
       uniform float uTime;
-      attribute float size;
-      attribute float colorUv;
-      attribute float brightness;
+      attribute float instanceSize;
+      attribute float instanceColorUv;
+      attribute float instanceBrightness;
       
+      varying vec2 vUv;
       varying float vColorUv;
       varying float vBrightness;
-      varying float vSize;
   
       void main() {
-        vColorUv = colorUv;
-        vBrightness = brightness;
-        vSize = size;
+        vUv = uv;
+        vColorUv = instanceColorUv;
+        vBrightness = instanceBrightness;
   
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * (300.0 / -mvPosition.z) * (sin(uTime * (0.1 + fract(position.x * 0.01)) + position.x * 0.5) * 0.5 + 0.5);
-        gl_Position = projectionMatrix * mvPosition;
+        // instanceMatrix will position/rotate/scale the entire plane.
+        // 'position' is the vertex of the base PlaneGeometry.
+        // We scale the base plane by instanceSize (multiplied by a factor if needed).
+        vec3 scaledPosition = position * instanceSize; // Using instanceSize directly for scaling
+        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(scaledPosition, 1.0);
       }
     `
 
   const fragmentShader = `
-      uniform sampler2D pointTexture;     // Texture for the star shape
-      uniform sampler2D uColorRamp;     // Texture for star colors
-      uniform float uTime;              // Time for blinking variation
-  
+      uniform sampler2D pointTexture;
+      uniform sampler2D uColorRamp; // Kept for potential future use
+      uniform float uTime;
+
+      varying vec2 vUv;
       varying float vColorUv;
       varying float vBrightness;
-      varying float vSize; // Received from vertex shader, can be used for additional effects if needed
   
       void main() {
-        vec4 tex = texture2D(pointTexture, gl_PointCoord);
+        // Blinking effect based on brightness and time
+        float blink = sin(uTime * vBrightness * 0.8 + vBrightness * 3.0) * 0.3 + 0.7;
+        float modulatedBrightness = clamp(vBrightness * blink, 0.1, 1.5);
+
+        vec4 tex = texture2D(pointTexture, vUv); // Use vUv for texturing the plane
+        if (tex.a < 0.1) {
+            discard; // Discard fragment if texture alpha is low
+        }
   
-        // --- Debug: Temporarily use only the pointTexture for color and alpha ---
-        gl_FragColor = tex;
-        // --- End Debug ---
-  
-        // Original code (commented out for debugging):
-        // vec3 baseColor = texture2D(uColorRamp, vec2(vColorUv, 0.5)).rgb;
-        // vec3 finalColor = baseColor * vBrightness;
-        // gl_FragColor = vec4(finalColor, tex.a);
-        // gl_FragColor.rgb *= tex.a;
+        // Example usage of uColorRamp (uncomment and adjust as needed)
+        // vec4 rampColor = texture2D(uColorRamp, vec2(vColorUv, 0.5));
+        // gl_FragColor = vec4(rampColor.rgb * modulatedBrightness, tex.a);
+
+        // Current: Modulate base texture color by brightness
+        gl_FragColor = vec4(tex.rgb * modulatedBrightness, tex.a);
       }
     `
 
-  const pointTexture = useMemo(() => new THREE.TextureLoader().load("/star.png"), [])
-  const colorRampTexture = useMemo(() => new THREE.TextureLoader().load("/star-color-ramp.png"), [])
+  const pointTexture = useMemo(() => {
+    console.log("Loading /star.png")
+    return new THREE.TextureLoader().load(
+      "/star.png",
+      (texture) => console.log("/star.png loaded successfully", texture),
+      undefined, // onProgress callback (optional)
+      (error) => console.error("Error loading /star.png", error)
+    )
+  }, [])
+  const colorRampTexture = useMemo(() => {
+    console.log("Loading /star-color-ramp.png")
+    return new THREE.TextureLoader().load(
+      "/star-color-ramp.png",
+      (texture) => console.log("/star-color-ramp.png loaded successfully", texture),
+      undefined, // onProgress callback (optional)
+      (error) => console.error("Error loading /star-color-ramp.png", error)
+    )
+  }, [])
+
+  const baseGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
 
   return (
-    <points ref={pointsRef}>
-      <bufferGeometry>
-        <primitive attach="attributes-position" object={positions} />
-        <primitive attach="attributes-size" object={sizes} />
-        <primitive attach="attributes-colorUv" object={colorUVs} />
-        <primitive attach="attributes-brightness" object={brightnessFactors} />
-      </bufferGeometry>
+    <Instances ref={instancedMeshRef} limit={count}>
+      <primitive object={baseGeometry} attach="geometry" />
       <shaderMaterial
         ref={shaderRef}
         uniforms={{
@@ -116,7 +168,15 @@ const Starfield = () => {
         depthWrite={false}
         transparent={true}
       />
-    </points>
+      {instanceData.map((data, i) => (
+        <Instance
+          key={i}
+          position={data.position}
+          // scale={data.size} // Alternative: Control scale via Instance prop, then vertex shader uses 'position' directly.
+          // If using this, then in vertex shader: vec3 scaledPosition = position;
+        />
+      ))}
+    </Instances>
   )
 }
 

@@ -3,21 +3,24 @@
 import { ModelBytemywork } from "@/components/bmw"
 import { GridPlane } from "@/components/space/grid-plane"
 import { Starfield } from "@/components/space/starfield"
-import { OrbitControls, PerspectiveCamera, /*PerspectiveCamera,*/ Stats } from "@react-three/drei"
+// import { ModelBytemywork } from "@/components/bmw" // Commented out as it's not used in simplified version
+import { PerspectiveCamera as DreiPerspectiveCamera, Stats } from "@react-three/drei"
 import { Canvas, useFrame } from "@react-three/fiber"
 import { Bloom, EffectComposer } from "@react-three/postprocessing"
+import { useLenis } from "lenis/react"
 import { useEffect, useRef, useState } from "react"
-import * as THREE from "three"
+import * as THREE from "three" // Commented out as it might be unused
 
-// Added easeInOutExpo function
+/* Easing function - can be kept if AnimatedCamera is restored later
 function easeInOutExpo(x: number): number {
   if (x === 0) return 0
   if (x === 1) return 1
   if (x < 0.5) return Math.pow(2, 20 * x - 10) / 2
   return (2 - Math.pow(2, -20 * x + 10)) / 2
 }
+*/
 
-// Modified AnimatedCamera to include onAnimationComplete callback
+/* --- AnimatedCamera Component (Currently Commented Out for Debugging Starfield) ---
 function AnimatedCamera({
   startAnimation,
   onAnimationComplete,
@@ -95,91 +98,149 @@ function AnimatedCamera({
 
   return <PerspectiveCamera ref={cameraRef} makeDefault fov={fov} near={0.1} far={600} />
 }
+*/
+
+// Easing function
+function easeInOutExpo(x: number): number {
+  if (x === 0) return 0
+  if (x === 1) return 1
+  if (x < 0.5) return Math.pow(2, 20 * x - 10) / 2
+  return (2 - Math.pow(2, -20 * x + 10)) / 2
+}
+
+// --- AnimatedCamera Component ---
+function AnimatedCamera({
+  startAnimation,
+  onAnimationComplete,
+  screenWidth,
+}: {
+  startAnimation: boolean
+  onAnimationComplete: () => void
+  screenWidth: number
+}) {
+  const cameraRef = useRef<THREE.PerspectiveCamera>(null!) // This ref is for a THREE.PerspectiveCamera instance
+  const CAMERA_X_POSITION = 0
+  const CAMERA_Y_POSITION = 0
+  const ANIMATION_START_Z = 1030
+  const ANIMATION_END_Z = 20
+  const animationTIncrement = 0.006
+  const tProgressRef = useRef(0)
+  const animationCompletedSignaledRef = useRef(false)
+  const lookAtTarget = useRef(new THREE.Vector3(0, 0, 0)).current
+  const fov = screenWidth < 768 ? 45 : 75
+
+  useEffect(() => {
+    if (cameraRef.current) {
+      cameraRef.current.fov = fov
+      cameraRef.current.updateProjectionMatrix()
+
+      if (startAnimation) {
+        cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, ANIMATION_START_Z)
+        cameraRef.current.lookAt(lookAtTarget)
+        tProgressRef.current = 0
+        animationCompletedSignaledRef.current = false
+      } else {
+        cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, ANIMATION_START_Z)
+        cameraRef.current.lookAt(lookAtTarget)
+        tProgressRef.current = 0
+        animationCompletedSignaledRef.current = true
+      }
+    }
+  }, [startAnimation, lookAtTarget, fov])
+
+  useFrame(() => {
+    if (!cameraRef.current || !startAnimation || animationCompletedSignaledRef.current) return
+    tProgressRef.current += animationTIncrement
+    if (tProgressRef.current >= 1.0) {
+      tProgressRef.current = 1.0
+      cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, ANIMATION_END_Z)
+      cameraRef.current.lookAt(lookAtTarget)
+      onAnimationComplete()
+      animationCompletedSignaledRef.current = true
+    } else {
+      const easedT = easeInOutExpo(tProgressRef.current)
+      const currentZ = ANIMATION_START_Z + (ANIMATION_END_Z - ANIMATION_START_Z) * easedT
+      cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, currentZ)
+      cameraRef.current.lookAt(lookAtTarget)
+    }
+  })
+  // Use DreiPerspectiveCamera here for makeDefault and R3F integration
+  return <DreiPerspectiveCamera ref={cameraRef} makeDefault fov={fov} near={0.1} far={2000} />
+}
 
 export default function SpacePage() {
-  // Renamed state for clarity and added animation completion state
+  const lenis = useLenis()
+
+  const [screenWidth, setScreenWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 0)
   const [startIntroAnimation, setStartIntroAnimation] = useState(false)
   const [introAnimationComplete, setIntroAnimationComplete] = useState(false)
-  const [screenWidth, setScreenWidth] = useState(0) // Added screenWidth state
-
-  // Calculate model scale based on screen width
-  const modelScale = screenWidth < 768 ? 0.175 : 1 // Example: smaller scale for mobile
+  // const [showButton, setShowButton] = useState(true) // Replaced by derived state below
 
   useEffect(() => {
-    // Set initial screen width and add resize listener
-    if (typeof window !== "undefined") {
-      setScreenWidth(window.innerWidth)
-      const handleResize = () => setScreenWidth(window.innerWidth)
-      window.addEventListener("resize", handleResize)
-      return () => window.removeEventListener("resize", handleResize)
+    const updateScreenSize = () => {
+      const currentScreenWidth = window.innerWidth
+      setScreenWidth(currentScreenWidth)
     }
+    window.addEventListener("resize", updateScreenSize)
+    updateScreenSize()
+    return () => window.removeEventListener("resize", updateScreenSize)
   }, [])
 
-  // Effect to handle page scroll lock during intro animation
   useEffect(() => {
-    if (!introAnimationComplete) {
-      // Animation has not completed (this covers initial state and during animation)
-      document.body.style.overflow = "hidden"
-    } else {
-      // Animation has completed, unlock scroll
-      document.body.style.overflow = "auto"
+    if (lenis) {
+      if (!introAnimationComplete) {
+        lenis.stop()
+      } else {
+        lenis.start()
+      }
     }
-
-    // Cleanup function to ensure scrolling is restored if component unmounts
     return () => {
-      document.body.style.overflow = "auto"
+      if (lenis) {
+        lenis.start()
+      }
     }
-  }, [introAnimationComplete]) // Depend only on introAnimationComplete
+  }, [introAnimationComplete, lenis])
 
   const handleEnterClick = () => {
+    // setShowButton(false) // No longer needed due to derived showButton state
     setStartIntroAnimation(true)
-    setIntroAnimationComplete(false) // Reset completion state if animation is re-triggered
+    setIntroAnimationComplete(false)
   }
 
   const handleIntroAnimationComplete = () => {
+    console.log("Intro animation completed.")
     setIntroAnimationComplete(true)
   }
 
-  // Button is shown if the intro animation hasn't been started yet
-  const showButton = !startIntroAnimation
+  const showButton = !startIntroAnimation && !introAnimationComplete
 
   return (
     <>
-      <div style={{ height: "100vh", width: "100vw", backgroundColor: "black", position: "relative" }}>
+      <div className="h-screen w-screen bg-black relative">
         {showButton && (
           <button
+            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-sm border-none rounded-md bg-transparent cursor-pointer z-10"
             onClick={handleEnterClick}
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              fontSize: "16px",
-              color: "#fff",
-              border: "none",
-              borderRadius: "5px",
-              backgroundColor: "transparent",
-              cursor: "pointer",
-              zIndex: 10, // Ensure button is on top of the canvas
-            }}
           >
             ENTER
           </button>
         )}
-        <Canvas style={{ position: "absolute", top: 0, left: 0, zIndex: 1 }}>
+        <Canvas className="absolute top-0 left-0">
           <AnimatedCamera
             startAnimation={startIntroAnimation}
             onAnimationComplete={handleIntroAnimationComplete}
-            screenWidth={screenWidth} // Pass screenWidth to AnimatedCamera
+            screenWidth={screenWidth}
           />
-          {/* <OrthographicCamera makeDefault position={[0, 0, -50]} zoom={3} near={0.1} far={600} /> */}
-          {/* <PerspectiveCamera makeDefault position={[0, 0, -50]} zoom={3} near={0.1} far={600} /> */}
+          {/* <OrbitControls />  You might want to enable OrbitControls after animation, e.g., based on introAnimationComplete state */}
+
           <color attach="background" args={["black"]} />
           <ambientLight intensity={2} />
+
+          {/* Starfield is now inside EffectComposer */}
           <EffectComposer>
             <Starfield />
             <GridPlane />
-            <ModelBytemywork color="#fff" scale={modelScale} />
+            <ModelBytemywork color="#fff" scale={1} />
             <Bloom
               intensity={0.4}
               luminanceThreshold={0.05}
@@ -188,50 +249,13 @@ export default function SpacePage() {
               kernelSize={3}
             />
           </EffectComposer>
-          {/* OrbitControls are disabled to allow page scrolling after intro animation */}
-          <OrbitControls enableZoom={true} enablePan={true} enabled={false} />
           <Stats />
         </Canvas>
       </div>
-      <div
-        style={{
-          height: "100vh",
-          width: "100vw",
-          backgroundColor: "black",
-          position: "relative",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <div>SECTION 1</div>
-      </div>
-      <div
-        style={{
-          height: "100vh",
-          width: "100vw",
-          backgroundColor: "black",
-          position: "relative",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <div>SECTION 2</div>
-      </div>
-      <div
-        style={{
-          height: "100vh",
-          width: "100vw",
-          backgroundColor: "black",
-          position: "relative",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <div>FOOTER</div>
-      </div>
+      <div className="h-screen w-screen bg-black">SECTION 1</div>
+      <div className="h-screen w-screen bg-black">SECTION 2</div>
+      <div className="h-screen w-screen bg-black">SECTION 3</div>
+      <div className="h-screen w-screen bg-black">FOOTER</div>
     </>
   )
 }
