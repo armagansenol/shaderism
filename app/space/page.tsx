@@ -1,180 +1,25 @@
 "use client"
 
-import { ModelBytemywork } from "@/components/bmw"
+import { LogoBytemywork } from "@/components/3d-models/logo-bytemywork"
+import { UnifiedCamera, UnifiedCameraRef } from "@/components/space/unified-camera"
 import { GridPlane } from "@/components/space/grid-plane"
+import { MouseSphere } from "@/components/space/mouse"
+import { PostProcessingManager, PostProcessingManagerRef } from "@/components/space/post-processing-manager"
 import { Starfield } from "@/components/space/starfield"
-// import { ModelBytemywork } from "@/components/bmw" // Commented out as it's not used in simplified version
-import { AdaptiveDpr, PerspectiveCamera as DreiPerspectiveCamera, Stats } from "@react-three/drei"
-import { Canvas, useFrame } from "@react-three/fiber"
-import { Bloom, EffectComposer } from "@react-three/postprocessing"
+import { AdaptiveDpr, Stats, Text, Float } from "@react-three/drei"
+import { Canvas } from "@react-three/fiber"
+import { EffectComposer } from "@react-three/postprocessing"
 import { useLenis } from "lenis/react"
 import { useEffect, useRef, useState } from "react"
-import * as THREE from "three" // Commented out as it might be unused
 
-/* Easing function - can be kept if AnimatedCamera is restored later
-function easeInOutExpo(x: number): number {
-  if (x === 0) return 0
-  if (x === 1) return 1
-  if (x < 0.5) return Math.pow(2, 20 * x - 10) / 2
-  return (2 - Math.pow(2, -20 * x + 10)) / 2
-}
-*/
-
-/* --- AnimatedCamera Component (Currently Commented Out for Debugging Starfield) ---
-function AnimatedCamera({
-  startAnimation,
-  onAnimationComplete,
-  screenWidth,
-}: {
-  startAnimation: boolean
-  onAnimationComplete: () => void
-  screenWidth: number
-}) {
-  const cameraRef = useRef<THREE.PerspectiveCamera>(null!)
-
-  const CAMERA_X_POSITION = 0
-  const CAMERA_Y_POSITION = 0 // Consistent Y height for the camera
-  const ANIMATION_START_Z = 1030 // Current initial Z from user's context
-  const ANIMATION_END_Z = 20 // Target Z, stopping in front of the origin
-
-  const animationTIncrement = 0.006 // Controls animation speed
-
-  const tProgressRef = useRef(0) // Animation progress 't' from 0 to 1
-  const animationCompletedSignaledRef = useRef(false) // To signal completion only once
-  const lookAtTarget = useRef(new THREE.Vector3(0, 0, 0)).current // Constant lookAt target
-
-  // Determine FOV based on screen width
-  const fov = screenWidth < 768 ? 45 : 75 // Example: 45 FOV for mobile, 75 for desktop
-
-  useEffect(() => {
-    if (cameraRef.current) {
-      if (startAnimation) {
-        cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, ANIMATION_START_Z)
-        cameraRef.current.lookAt(lookAtTarget)
-        tProgressRef.current = 0
-        animationCompletedSignaledRef.current = false // Reset completion flag when animation (re)starts
-      } else {
-        // Initial state or if startAnimation becomes false
-        cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, ANIMATION_START_Z)
-        cameraRef.current.lookAt(lookAtTarget)
-        tProgressRef.current = 0
-        // Consider if animationCompletedSignaledRef should be true or false here based on desired reset behavior
-        // For now, assuming if not startAnimation, it implies a reset or initial state where controls might not be active yet.
-        // If controls could be active, this might need to be true.
-        // Given current SpacePage logic, startAnimation only goes true once.
-        animationCompletedSignaledRef.current = true
-      }
-    }
-  }, [startAnimation, lookAtTarget])
-
-  useFrame(() => {
-    if (!cameraRef.current || !startAnimation || animationCompletedSignaledRef.current) {
-      // Animation is not active, camera isn't ready, or it has already completed.
-      return
-    }
-
-    // Increment progress
-    tProgressRef.current += animationTIncrement
-
-    if (tProgressRef.current >= 1.0) {
-      // Reached or passed the end point of the animation
-      tProgressRef.current = 1.0 // Clamp progress to exactly 1.0
-
-      cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, ANIMATION_END_Z)
-      cameraRef.current.lookAt(lookAtTarget)
-
-      // Signal completion to the parent component and mark as completed internally
-      // This ensures onAnimationComplete is called only once and further updates are stopped.
-      onAnimationComplete()
-      animationCompletedSignaledRef.current = true
-    } else {
-      // Animation is still in progress
-      const easedT = easeInOutExpo(tProgressRef.current)
-      const currentZ = ANIMATION_START_Z + (ANIMATION_END_Z - ANIMATION_START_Z) * easedT
-      cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, currentZ)
-      cameraRef.current.lookAt(lookAtTarget)
-    }
-  })
-
-  return <PerspectiveCamera ref={cameraRef} makeDefault fov={fov} near={0.1} far={600} />
-}
-*/
-
-// Easing function
-function easeInOutExpo(x: number): number {
-  if (x === 0) return 0
-  if (x === 1) return 1
-  if (x < 0.5) return Math.pow(2, 20 * x - 10) / 2
-  return (2 - Math.pow(2, -20 * x + 10)) / 2
-}
-
-// --- AnimatedCamera Component ---
-function AnimatedCamera({
-  startAnimation,
-  onAnimationComplete,
-  screenWidth,
-}: {
-  startAnimation: boolean
-  onAnimationComplete: () => void
-  screenWidth: number
-}) {
-  const cameraRef = useRef<THREE.PerspectiveCamera>(null!) // This ref is for a THREE.PerspectiveCamera instance
-  const CAMERA_X_POSITION = 0
-  const CAMERA_Y_POSITION = 0
-  const ANIMATION_START_Z = 1030
-  const ANIMATION_END_Z = 20
-  const animationTIncrement = 0.006
-  const tProgressRef = useRef(0)
-  const animationCompletedSignaledRef = useRef(false)
-  const lookAtTarget = useRef(new THREE.Vector3(0, 0, 0)).current
-  const fov = screenWidth < 768 ? 45 : 75
-
-  useEffect(() => {
-    if (cameraRef.current) {
-      cameraRef.current.fov = fov
-      cameraRef.current.updateProjectionMatrix()
-
-      if (startAnimation) {
-        cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, ANIMATION_START_Z)
-        cameraRef.current.lookAt(lookAtTarget)
-        tProgressRef.current = 0
-        animationCompletedSignaledRef.current = false
-      } else {
-        cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, ANIMATION_START_Z)
-        cameraRef.current.lookAt(lookAtTarget)
-        tProgressRef.current = 0
-        animationCompletedSignaledRef.current = true
-      }
-    }
-  }, [startAnimation, lookAtTarget, fov])
-
-  useFrame(() => {
-    if (!cameraRef.current || !startAnimation || animationCompletedSignaledRef.current) return
-    tProgressRef.current += animationTIncrement
-    if (tProgressRef.current >= 1.0) {
-      tProgressRef.current = 1.0
-      cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, ANIMATION_END_Z)
-      cameraRef.current.lookAt(lookAtTarget)
-      onAnimationComplete()
-      animationCompletedSignaledRef.current = true
-    } else {
-      const easedT = easeInOutExpo(tProgressRef.current)
-      const currentZ = ANIMATION_START_Z + (ANIMATION_END_Z - ANIMATION_START_Z) * easedT
-      cameraRef.current.position.set(CAMERA_X_POSITION, CAMERA_Y_POSITION, currentZ)
-      cameraRef.current.lookAt(lookAtTarget)
-    }
-  })
-  // Use DreiPerspectiveCamera here for makeDefault and R3F integration
-  return <DreiPerspectiveCamera ref={cameraRef} makeDefault fov={fov} near={0.1} far={2000} />
-}
-
-export default function SpacePage() {
+export default function Page() {
   const lenis = useLenis()
+  const postProcessingRef = useRef<PostProcessingManagerRef>(null)
+  const cameraRef = useRef<UnifiedCameraRef>(null)
 
   const [screenWidth, setScreenWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 0)
   const [startIntroAnimation, setStartIntroAnimation] = useState(false)
   const [introAnimationComplete, setIntroAnimationComplete] = useState(false)
-  // const [showButton, setShowButton] = useState(true) // Replaced by derived state below
 
   useEffect(() => {
     const updateScreenSize = () => {
@@ -202,13 +47,31 @@ export default function SpacePage() {
   }, [introAnimationComplete, lenis])
 
   const handleEnterClick = () => {
-    // setShowButton(false) // No longer needed due to derived showButton state
+    // Trigger the glitch effect fade-out
+    if (postProcessingRef.current) {
+      postProcessingRef.current.fadeOutGlitch(1.5) // 1.5 second fade-out
+    }
+
+    // Start camera animation from current position to endZ
+    if (cameraRef.current) {
+      cameraRef.current.startAnimation(1500, 20, 3.0) // 3 second animation
+    }
+
     setStartIntroAnimation(true)
     setIntroAnimationComplete(false)
   }
 
   const handleIntroAnimationComplete = () => {
     console.log("Intro animation completed.")
+
+    // Animate CRT effects to completely clean (0 values)
+    if (postProcessingRef.current) {
+      console.log("Starting CRT parameter animation to remove effects")
+      postProcessingRef.current.animateGlitchToClean(1.0) // 1 second duration
+    } else {
+      console.log("postProcessingRef.current is null!")
+    }
+
     setIntroAnimationComplete(true)
   }
 
@@ -219,35 +82,53 @@ export default function SpacePage() {
       <div className="h-screen w-screen bg-black relative">
         {showButton && (
           <button
-            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-sm border-none rounded-md bg-transparent cursor-pointer z-10"
+            className="font-bold underline absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-sm border-none rounded-md bg-transparent cursor-pointer z-10"
             onClick={handleEnterClick}
           >
-            ENTER
+            START
           </button>
         )}
         <Canvas className="absolute top-0 left-0">
-          <AnimatedCamera
-            startAnimation={startIntroAnimation}
-            onAnimationComplete={handleIntroAnimationComplete}
+          <UnifiedCamera
+            ref={cameraRef}
             screenWidth={screenWidth}
+            initialPosition={[0, 0, 1500]}
+            mouseEnabled={true}
+            mouseLimitX={8}
+            mouseLimitY={5}
+            mouseSmoothing={0.03}
+            mouseSensitivity={1.2}
+            onAnimationComplete={handleIntroAnimationComplete}
           />
-          {/* <OrbitControls />  You might want to enable OrbitControls after animation, e.g., based on introAnimationComplete state */}
-
           <color attach="background" args={["black"]} />
           <ambientLight intensity={2} />
-
-          {/* Starfield is now inside EffectComposer */}
           <EffectComposer>
+            <LogoBytemywork color="#fff" scale={10} position={[0, 150, 1100]} />
+            <Text color="white" position={[350, 80, 1000]} fontSize={16} fontWeight={400}>
+              WEB DESIGN & DEV AGENCY
+            </Text>
+            <Text color="white" position={[0, -300, 1000]} fontSize={16} fontWeight={400}>
+              WE ARE ABOUT DIGITAL EXPERIENCE & DESIGN
+            </Text>
+            <MouseSphere />
             <Starfield />
             <GridPlane />
-            <ModelBytemywork color="#fff" scale={1} />
-            <Bloom
-              intensity={0.4}
-              luminanceThreshold={0.05}
-              luminanceSmoothing={0.2}
-              mipmapBlur={true}
-              kernelSize={3}
-            />
+            <Float speed={1.5} rotationIntensity={0.5} floatIntensity={1.8}>
+              <Text color="white" scale={0.025} position={[0, -5, 0]} fontSize={100} fontWeight={700}>
+                BRANDING
+              </Text>
+            </Float>
+            <Float speed={1.2} rotationIntensity={0.5} floatIntensity={2.0}>
+              <Text color="white" scale={0.025} position={[0, 0, 0]} fontSize={100} fontWeight={700}>
+                WEB DESIGN
+              </Text>
+            </Float>
+            <Float speed={1.8} rotationIntensity={0.5} floatIntensity={1.6}>
+              <Text color="white" scale={0.025} position={[0, 5, 0]} fontSize={100} fontWeight={700}>
+                WEB DEVELOPMENT
+              </Text>
+            </Float>
+            <PostProcessingManager ref={postProcessingRef} enableGUI={true} />
           </EffectComposer>
           <Stats />
           <AdaptiveDpr pixelated />

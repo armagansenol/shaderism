@@ -7,9 +7,13 @@ import * as THREE from "three"
 const waterNormalsTextureURL1 = "/water-normal-map-3.jpg" // Path for the first normal map
 // const waterNormalsTextureURL2 = "/vortex-map.png" // We'll set this aside for now, vortex is geometric
 
+// Global flag to prevent multiple GUI creation
+let globalGuiCreated = false
+
 const GridPlane = () => {
   const meshRef = useRef<THREE.Mesh>(null!)
   const materialRef = useRef<THREE.ShaderMaterial>(null!)
+  const guiRef = useRef<{ destroy: () => void } | null>(null) // Add ref to track GUI instance
 
   const { scene, camera } = useThree()
 
@@ -40,6 +44,11 @@ const GridPlane = () => {
       cylinderEndFadeStart: 0.7,
       cylinderEndFadeLength: 0.3,
       cylinderOpeningFade: 0.1,
+      // Hourglass shape parameters
+      topRadius: 200, // Radius at the top
+      waistRadius: 25, // Radius at the narrowest point (middle)
+      bottomRadius: 80, // Radius at the bottom
+      waistPosition: 0.5, // Position of waist along height (0.0 = bottom, 1.0 = top)
     }),
     []
   )
@@ -85,13 +94,19 @@ const GridPlane = () => {
 
   useEffect(() => {
     if (!materialRef.current?.uniforms) return
+    if (guiRef.current) return // Prevent creating multiple GUIs
+    if (globalGuiCreated) return // Global check to prevent any duplicate GUI
 
     // Dynamically import dat.gui only on the client side
     if (typeof window !== "undefined") {
       import("dat.gui")
         .then((dat) => {
+          if (globalGuiCreated) return // Double-check in case another instance started creating GUI
+
           const GUI = dat.GUI // Access GUI constructor from the imported module
           const gui = new GUI()
+          guiRef.current = gui // Store the GUI instance
+          globalGuiCreated = true // Mark as created globally
           const guiFolder = gui.addFolder("Tunnel Controls")
 
           const guiParams = {
@@ -171,7 +186,80 @@ const GridPlane = () => {
               materialRef.current.uniforms.uCylinderEndFadeLength.value = value
             })
 
-          guiFolder.open()
+          // Add hourglass shape controls
+          const createHourglassGeometry = () => {
+            const points = []
+            const segments = 20 // Number of points along the profile
+
+            for (let i = 0; i <= segments; i++) {
+              const t = i / segments // 0 to 1
+
+              // Create hourglass curve using smooth interpolation
+              let radius
+              if (t <= initialParams.waistPosition) {
+                // From bottom to waist
+                const localT = t / initialParams.waistPosition
+                radius =
+                  initialParams.bottomRadius +
+                  (initialParams.waistRadius - initialParams.bottomRadius) *
+                    (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
+              } else {
+                // From waist to top
+                const localT = (t - initialParams.waistPosition) / (1 - initialParams.waistPosition)
+                radius =
+                  initialParams.waistRadius +
+                  (initialParams.topRadius - initialParams.waistRadius) *
+                    (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
+              }
+
+              const y = (t - 0.5) * cylinderHeight // Center the hourglass
+              points.push(new THREE.Vector2(radius, y))
+            }
+
+            return new THREE.LatheGeometry(points, 32)
+          }
+
+          const hourglassFolder = guiFolder.addFolder("Hourglass Shape")
+          hourglassFolder
+            .add(initialParams, "topRadius", 5.0, 200.0, 1.0)
+            .name("Top Radius")
+            .onChange(() => {
+              if (meshRef.current) {
+                const newGeometry = createHourglassGeometry()
+                meshRef.current.geometry.dispose()
+                meshRef.current.geometry = newGeometry
+              }
+            })
+          hourglassFolder
+            .add(initialParams, "waistRadius", 5.0, 100.0, 1.0)
+            .name("Waist Radius")
+            .onChange(() => {
+              if (meshRef.current) {
+                const newGeometry = createHourglassGeometry()
+                meshRef.current.geometry.dispose()
+                meshRef.current.geometry = newGeometry
+              }
+            })
+          hourglassFolder
+            .add(initialParams, "bottomRadius", 5.0, 150.0, 1.0)
+            .name("Bottom Radius")
+            .onChange(() => {
+              if (meshRef.current) {
+                const newGeometry = createHourglassGeometry()
+                meshRef.current.geometry.dispose()
+                meshRef.current.geometry = newGeometry
+              }
+            })
+          hourglassFolder
+            .add(initialParams, "waistPosition", 0.2, 0.8, 0.01)
+            .name("Waist Position")
+            .onChange(() => {
+              if (meshRef.current) {
+                const newGeometry = createHourglassGeometry()
+                meshRef.current.geometry.dispose()
+                meshRef.current.geometry = newGeometry
+              }
+            })
 
           if (gui.domElement) {
             gui.domElement.style.zIndex = "9999"
@@ -187,14 +275,13 @@ const GridPlane = () => {
           console.error("Failed to load dat.gui", error)
         })
     }
-    // If not in window context, we don't do anything, and no cleanup is needed initially.
-    // The return from the promise handles cleanup if GUI was loaded.
-    // If you need a general cleanup function for other things in useEffect, define it here.
+    // Cleanup function to destroy GUI when component unmounts
     return () => {
-      // General cleanup if needed, e.g. if gui instance was stored on the component
-      // and needs to be destroyed regardless of promise success.
-      // This might be tricky if gui is only defined in the promise scope.
-      // A common pattern is to use a ref to store the gui instance.
+      if (guiRef.current) {
+        guiRef.current.destroy()
+        guiRef.current = null
+        globalGuiCreated = false // Reset global flag
+      }
     }
   }, [initialParams]) // Removed setIsVortexActive from dependencies
 
@@ -320,8 +407,39 @@ const GridPlane = () => {
 
   // Cylinder: radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded
   // Height is along Y by default. Rotate to make it along Z.
-  const cylinderRadius = 50
-  const cylinderHeight = 1000
+  const cylinderHeight = 1050
+
+  // Create hourglass geometry
+  const createHourglassGeometry = () => {
+    const points = []
+    const segments = 20 // Number of points along the profile
+
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments // 0 to 1
+
+      // Create hourglass curve using smooth interpolation
+      let radius
+      if (t <= initialParams.waistPosition) {
+        // From bottom to waist
+        const localT = t / initialParams.waistPosition
+        radius =
+          initialParams.bottomRadius +
+          (initialParams.waistRadius - initialParams.bottomRadius) *
+            (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
+      } else {
+        // From waist to top
+        const localT = (t - initialParams.waistPosition) / (1 - initialParams.waistPosition)
+        radius =
+          initialParams.waistRadius +
+          (initialParams.topRadius - initialParams.waistRadius) * (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
+      }
+
+      const y = (t - 0.5) * cylinderHeight // Center the hourglass
+      points.push(new THREE.Vector2(radius, y))
+    }
+
+    return new THREE.LatheGeometry(points, 32)
+  }
 
   return (
     <mesh
@@ -331,7 +449,7 @@ const GridPlane = () => {
       rotation={[Math.PI / 2, 0, 0]}
       position={[0, 0, cylinderHeight / 2]} // Position so one end is near origin if camera looks at 0,0,0
     >
-      <cylinderGeometry args={[cylinderRadius, cylinderRadius, cylinderHeight, 32, 5, true]} />
+      {React.createElement("primitive", { object: createHourglassGeometry() })}
       <shaderMaterial
         ref={materialRef}
         args={[

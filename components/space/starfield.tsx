@@ -7,9 +7,9 @@ const Starfield = () => {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null!)
   const shaderRef = useRef<THREE.ShaderMaterial>(null!)
 
-  const count = 500
+  const count = 1000
   const minRadius = 20
-  const maxRadius = 100
+  const maxRadius = 1500
 
   const instanceData = useMemo(() => {
     const data = []

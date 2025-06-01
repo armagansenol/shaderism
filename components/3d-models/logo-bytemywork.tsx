@@ -9,12 +9,12 @@ type GLTFResult = GLTF & {
   }
 }
 
-export function ModelBytemywork(props: Record<string, unknown> & { scale?: number }) {
-  const { color = "#ffffff", scale = 1, ...restProps } = props
+const LogoBytemywork = (props: Record<string, unknown> & { scale?: number; position?: [number, number, number] }) => {
+  const { color = "#ffffff", scale = 1, position = [0, 0, -15], ...restProps } = props
   const { nodes } = useGLTF("/glb/bmw.glb") as unknown as GLTFResult
 
   return (
-    <group {...restProps} dispose={null} position={[0, 0, -15]}>
+    <group {...restProps} dispose={null} position={position}>
       <mesh
         castShadow
         receiveShadow
@@ -28,5 +28,7 @@ export function ModelBytemywork(props: Record<string, unknown> & { scale?: numbe
     </group>
   )
 }
+
+export { LogoBytemywork }
 
 useGLTF.preload("/glb/bmw.glb")
