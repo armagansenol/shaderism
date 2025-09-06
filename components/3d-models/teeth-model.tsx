@@ -37,6 +37,11 @@ export function Model(props: ThreeElements["group"]) {
   })
   const sharedMaterial = useMemo(() => new THREE.MeshPhysicalMaterial(), [])
 
+  // Interaction controls
+  const { followStrength } = useControls("Interaction", {
+    followStrength: { value: 0.12, min: 0, max: 1, step: 0.01, label: "Follow Strength" },
+  })
+
   useEffect(() => {
     sharedMaterial.color.set(plasticMaterialProps.color as string)
     sharedMaterial.metalness = plasticMaterialProps.metalness as number
@@ -57,6 +62,15 @@ export function Model(props: ThreeElements["group"]) {
   const targetPoint = useMemo(() => new THREE.Vector3(), [])
   const tempObject = useMemo(() => new THREE.Object3D(), [])
   const desiredQuaternion = useMemo(() => new THREE.Quaternion(), [])
+  const baseLocalPosition = useMemo(() => new THREE.Vector3(), [])
+  const tempTargetLocal = useMemo(() => new THREE.Vector3(), [])
+  const desiredLocalPosition = useMemo(() => new THREE.Vector3(), [])
+
+  useEffect(() => {
+    if (modelRef.current) {
+      baseLocalPosition.copy(modelRef.current.position)
+    }
+  }, [baseLocalPosition])
 
   useFrame(({ camera, pointer }) => {
     if (!modelRef.current) return
@@ -67,6 +81,16 @@ export function Model(props: ThreeElements["group"]) {
     tempObject.lookAt(targetPoint)
     desiredQuaternion.copy(tempObject.quaternion)
     modelRef.current.quaternion.slerp(desiredQuaternion, 0.2)
+
+    // Smooth, slight position follow towards pointer
+    if (modelRef.current.parent) {
+      tempTargetLocal.copy(targetPoint)
+      modelRef.current.parent.worldToLocal(tempTargetLocal)
+      // Move only a fraction from base towards the target to keep it subtle
+      desiredLocalPosition.copy(baseLocalPosition).lerp(tempTargetLocal, followStrength as number)
+      // Smoothly interpolate current position towards desired
+      modelRef.current.position.lerp(desiredLocalPosition, 0.15)
+    }
   })
 
   function handlePointerEnter() {
