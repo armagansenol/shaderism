@@ -16,11 +16,6 @@ export default function Page() {
             </Link>
           </li>
           <li>
-            <Link href='/particles' className='text-blue-500 hover:underline'>
-              Particles
-            </Link>
-          </li>
-          <li>
             <Link href='/space' className='text-blue-500 hover:underline'>
               Space
             </Link>
