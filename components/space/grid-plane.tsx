@@ -161,7 +161,7 @@ const GridPlane = () => {
               materialRef.current.uniforms.uGridDensity.value = value
             })
           flatGridFolder
-            .add(initialParams, "numCircumferentialLines", 5.0, 100.0, 1.0)
+            .add(initialParams, "numCircumferentialLines", 0.0, 100.0, 1.0)
             .name("Circumferential Lines")
             .onChange((value: number) => {
               materialRef.current.uniforms.uNumCircumferentialLines.value = value

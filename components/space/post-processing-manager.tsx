@@ -2,12 +2,13 @@
 
 import { Bloom } from "@react-three/postprocessing"
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
-import { GlitchEffect, GlitchPostEffect } from "./glitch-post-effect"
+import { CRTEffect, CRTPostEffect } from "./crt-post-effect"
 
 export interface PostProcessingManagerRef {
   fadeOutGlitch: (duration?: number) => void
   animateGlitchToClean: (duration?: number) => void
   setEffect: (effect: string) => void
+  animateBarrelDistortionTransition: () => void
 }
 
 interface PostProcessingManagerProps {
@@ -16,7 +17,7 @@ interface PostProcessingManagerProps {
 
 export const PostProcessingManager = forwardRef<PostProcessingManagerRef, PostProcessingManagerProps>(
   ({ enableGUI = true }, ref) => {
-    const glitchEffectRef = useRef<GlitchEffect | null>(null)
+    const glitchEffectRef = useRef<CRTEffect | null>(null)
     const guiRef = useRef<unknown>(null)
     const [currentEffect, setCurrentEffect] = useState("glitch") // "none", "glitch"
 
@@ -36,10 +37,25 @@ export const PostProcessingManager = forwardRef<PostProcessingManagerRef, PostPr
               colorBleeding: 0.0,
               bleedingRangeX: 0.0,
               bleedingRangeY: 0.0,
-              linesDistance: 0.0,
+              // Avoid division by zero in shader while fading out
+              linesDistance: 1.0,
+              scanlineAlpha: 0.0,
             },
             duration
           )
+        }
+      },
+      animateBarrelDistortionTransition: () => {
+        // First 2 seconds: smoothly increase barrel distortion to 4.0
+        if (glitchEffectRef.current) {
+          // Ensure effect is active and visible
+          updateEffectIntensities("glitch")
+          glitchEffectRef.current.fadeInEffect(0.2)
+          glitchEffectRef.current.animateParametersTo({ barrelPower: 4.0 }, 2.0)
+          // Last 1 second: smoothly return to 1.1
+          setTimeout(() => {
+            glitchEffectRef.current?.animateParametersTo({ barrelPower: 1.1 }, 1.0)
+          }, 2000)
         }
       },
       setEffect: (effect: string) => {
@@ -136,17 +152,17 @@ export const PostProcessingManager = forwardRef<PostProcessingManagerRef, PostPr
     return (
       <>
         <Bloom intensity={0.02} luminanceThreshold={0.05} luminanceSmoothing={0.02} mipmapBlur={true} kernelSize={30} />
-        <GlitchPostEffect
+        <CRTPostEffect
           ref={glitchEffectRef}
           barrelPower={1.1}
-          colorBleeding={1.2}
+          colorBleeding={1.1}
           bleedingRangeX={3.0}
           bleedingRangeY={3.0}
           linesDistance={4.0}
           scanSize={2.0}
           scanlineAlpha={0.9}
           linesVelocity={30.0}
-          pixelationGranularity={3}
+          pixelationGranularity={2}
         />
       </>
     )

@@ -13,6 +13,9 @@ export const fragmentShader = `
   uniform float u_time;
   uniform vec2 u_mouse;
   uniform vec2 u_resolution;
+  uniform float u_ditherScale;
+  uniform float u_ditherThreshold;
+  uniform float u_bayerLevel;
   varying vec2 v_uv;
 
   float random(vec2 st) {
@@ -38,6 +41,38 @@ export const fragmentShader = `
       return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
   }
 
+  // Define Bayer matrices first
+  float bayer2(vec2 coord) {
+      mat2 m = mat2(
+          0.0, 0.5,
+          0.75, 0.25
+      );
+      return m[int(coord.x)][int(coord.y)];
+  }
+
+  float bayer4(vec2 coord) {
+      mat4 m = mat4(
+          0.0/16.0, 8.0/16.0, 2.0/16.0, 10.0/16.0,
+          12.0/16.0, 4.0/16.0, 14.0/16.0, 6.0/16.0,
+          3.0/16.0, 11.0/16.0, 1.0/16.0, 9.0/16.0,
+          15.0/16.0, 7.0/16.0, 13.0/16.0, 5.0/16.0
+      );
+      return m[int(coord.x)][int(coord.y)];
+  }
+
+  float bayer8(vec2 coord) {
+      return bayer4(mod(coord, 4.0)); // Simplified 8x8 pattern
+  }
+
+  // Now define the bayerMatrix function that uses them
+  float bayerMatrix(vec2 coord, float level) {
+      vec2 bayerCoord = floor(mod(coord, level));
+      if(level == 2.0) return bayer2(bayerCoord);
+      if(level == 4.0) return bayer4(bayerCoord);
+      if(level == 8.0) return bayer8(bayerCoord);
+      return 0.0;
+  }
+
   void main() {
       vec2 uv = v_uv;
       vec2 aspect = vec2(u_resolution.x/u_resolution.y, 1.0);
@@ -54,14 +89,15 @@ export const fragmentShader = `
       
       n = n * (1.0 + mouseInfluence);
       
-      vec3 color1 = vec3(0.1);    // dark gray
-      vec3 color2 = vec3(0.0);    // black
-
-      // Dithering pattern
-      float dither = random(gl_FragCoord.xy / 2.0);
-      float pattern = step(dither, n);
-      vec3 finalColor = mix(color1, color2, pattern);
+      // Obra Dinn style dithering
+      float dither = bayerMatrix(gl_FragCoord.xy / u_ditherScale, u_bayerLevel);
+      float pattern = step(dither, n + u_ditherThreshold);
       
-      gl_FragColor = vec4(finalColor, 1.0);
+      // Change to Obra Dinn's green-tinted monochrome
+      vec3 darkColor = vec3(0.85, 1.0, 0.8);  // Dark olive green
+      vec3 lightColor = vec3(0.05, 0.07, 0.03);  // Slightly green-tinted white
+      vec3 color = mix(darkColor, lightColor, pattern);
+      
+      gl_FragColor = vec4(color, 1.0);
   }
 `
