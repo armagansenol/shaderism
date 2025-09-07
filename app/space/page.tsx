@@ -2,11 +2,10 @@
 
 import { LogoBytemywork } from "@/components/3d-models/logo-bytemywork"
 import { TeethModel } from "@/components/3d-models/teeth-model"
-import { MouseSphere } from "@/components/space/mouse"
 import { PostProcessingManager, PostProcessingManagerRef } from "@/components/space/post-processing-manager"
 import { Starfield } from "@/components/space/starfield"
 import { UnifiedCamera, UnifiedCameraRef } from "@/components/space/unified-camera"
-import { AdaptiveDpr, Float, Stats, Text, OrbitControls } from "@react-three/drei"
+import { AdaptiveDpr, Float, OrbitControls, Stats, Text } from "@react-three/drei"
 import { Canvas } from "@react-three/fiber"
 import { EffectComposer } from "@react-three/postprocessing"
 import { useLenis } from "lenis/react"
@@ -122,7 +121,7 @@ export default function Page() {
             START
           </button>
         )}
-        <Canvas className='absolute top-0 left-0' shadows>
+        <Canvas className='absolute top-0 left-0' shadows dpr={[1, 1.5]}>
           {orbitEnabled && <OrbitControls makeDefault />}
           <UnifiedCamera
             ref={cameraRef}
@@ -144,7 +143,6 @@ export default function Page() {
           <Text color='white' position={[0, -300, 1000]} fontSize={16} fontWeight={400}>
             WE ARE ABOUT DIGITAL EXPERIENCE & DESIGN
           </Text>
-          <MouseSphere />
           <Starfield />
           {/* <GridPlane /> */}
           <TeethModel />

@@ -1,6 +1,6 @@
 "use client"
 
-import { Center, useAnimations, useGLTF } from "@react-three/drei"
+import { Center, Float, useAnimations, useGLTF } from "@react-three/drei"
 import { useFrame, type ThreeElements } from "@react-three/fiber"
 import { useControls } from "leva"
 import { useEffect, useMemo, useRef } from "react"
@@ -15,14 +15,11 @@ type GLTFResult = GLTF & {
   materials: Record<string, THREE.Material>
 }
 
-type ActionName = "Dis AltAction" | "Dis UstAction"
-// removed unused GLTFActions type
-
 export function Model(props: ThreeElements["group"]) {
   const group = useRef<THREE.Group>(null)
   const { nodes, animations } = useGLTF("/glb/teeth.glb") as unknown as GLTFResult
   const { actions } = useAnimations(animations, group)
-  const typedActions = actions as unknown as Partial<Record<ActionName, THREE.AnimationAction>>
+  const typedActions = actions as Record<string, THREE.AnimationAction>
 
   // Shared material with Leva controls
   const plasticMaterialProps = useControls("Plastic Material", {
@@ -39,7 +36,7 @@ export function Model(props: ThreeElements["group"]) {
 
   // Interaction controls
   const { followStrength } = useControls("Interaction", {
-    followStrength: { value: 0.12, min: 0, max: 1, step: 0.01, label: "Follow Strength" },
+    followStrength: { value: 0.7, min: 0, max: 1, step: 0.01, label: "Follow Strength" },
   })
 
   useEffect(() => {
@@ -65,6 +62,7 @@ export function Model(props: ThreeElements["group"]) {
   const baseLocalPosition = useMemo(() => new THREE.Vector3(), [])
   const tempTargetLocal = useMemo(() => new THREE.Vector3(), [])
   const desiredLocalPosition = useMemo(() => new THREE.Vector3(), [])
+  const worldPos = useMemo(() => new THREE.Vector3(), [])
 
   useEffect(() => {
     if (modelRef.current) {
@@ -72,15 +70,18 @@ export function Model(props: ThreeElements["group"]) {
     }
   }, [baseLocalPosition])
 
-  useFrame(({ camera, pointer }) => {
+  useFrame(({ camera, pointer }, delta) => {
     if (!modelRef.current) return
     raycaster.setFromCamera(pointer, camera)
     const hit = raycaster.ray.intersectPlane(plane, targetPoint)
     if (!hit) return
-    tempObject.position.copy(modelRef.current.getWorldPosition(new THREE.Vector3()))
+    // Reuse cached vector to avoid per-frame allocations
+    tempObject.position.copy(modelRef.current.getWorldPosition(worldPos))
     tempObject.lookAt(targetPoint)
     desiredQuaternion.copy(tempObject.quaternion)
-    modelRef.current.quaternion.slerp(desiredQuaternion, 0.2)
+    // Frame-rate independent smoothing (~0.1 @ 60fps)
+    const t = 1 - Math.pow(1 - 0.1, (delta ?? 0) * 60)
+    modelRef.current.quaternion.slerp(desiredQuaternion, t)
 
     // Smooth, slight position follow towards pointer
     if (modelRef.current.parent) {
@@ -89,48 +90,48 @@ export function Model(props: ThreeElements["group"]) {
       // Move only a fraction from base towards the target to keep it subtle
       desiredLocalPosition.copy(baseLocalPosition).lerp(tempTargetLocal, followStrength as number)
       // Smoothly interpolate current position towards desired
-      modelRef.current.position.lerp(desiredLocalPosition, 0.15)
+      modelRef.current.position.lerp(desiredLocalPosition, t)
     }
   })
 
   function handlePointerEnter() {
-    typedActions?.["Dis UstAction"]?.reset().setEffectiveTimeScale(15).play()
-    typedActions?.["Dis AltAction"]?.reset().setEffectiveTimeScale(15).play()
+    typedActions?.["mandibular-action"]?.reset().setEffectiveTimeScale(13).play()
+    typedActions?.["maxillary-action"]?.reset().setEffectiveTimeScale(13).play()
   }
   function handlePointerLeave() {
-    typedActions?.["Dis UstAction"]?.fadeOut(0.5)
-    typedActions?.["Dis AltAction"]?.fadeOut(0.5)
+    typedActions?.["mandibular-action"]?.fadeOut(0.5)
+    typedActions?.["maxillary-action"]?.fadeOut(0.5)
   }
 
   return (
     <group ref={group} {...props} dispose={null}>
-      <group name='Scene' castShadow>
-        <group ref={modelRef} name='teeth' userData={{ name: "teeth" }}>
-          <mesh
-            name='mandibular'
-            castShadow
-            receiveShadow
-            geometry={nodes.mandibular.geometry}
-            material={sharedMaterial}
-            position={[0.027, -2.157, -0.046]}
-            rotation={[Math.PI / 2, 0, 0]}
-            userData={{ name: "mandibular" }}
-            onPointerEnter={handlePointerEnter}
-            onPointerLeave={handlePointerLeave}
-          />
-          <mesh
-            name='maxillary'
-            castShadow
-            receiveShadow
-            geometry={nodes.maxillary.geometry}
-            material={sharedMaterial}
-            position={[-0.027, 2.157, 0.046]}
-            rotation={[Math.PI / 2, 0, 0]}
-            userData={{ name: "maxillary" }}
-            onPointerEnter={handlePointerEnter}
-            onPointerLeave={handlePointerLeave}
-          />
-        </group>
+      <group name='Scene'>
+        <Float speed={4} rotationIntensity={0.5} floatIntensity={1.0} floatingRange={[-6, 6]}>
+          <group ref={modelRef} name='teeth' userData={{ name: "teeth" }}>
+            <mesh
+              name='mandibular'
+              castShadow
+              receiveShadow
+              geometry={nodes.mandibular.geometry}
+              material={sharedMaterial}
+              position={[0.139, -2.577, -0.337]}
+              rotation={[Math.PI / 2, 0, 0]}
+              onPointerEnter={handlePointerEnter}
+              onPointerLeave={handlePointerLeave}
+            />
+            <mesh
+              name='maxillary'
+              castShadow
+              receiveShadow
+              geometry={nodes.maxillary.geometry}
+              material={sharedMaterial}
+              position={[-0.139, 2.577, 0.337]}
+              rotation={[Math.PI / 2, 0, 0]}
+              onPointerEnter={handlePointerEnter}
+              onPointerLeave={handlePointerLeave}
+            />
+          </group>
+        </Float>
       </group>
     </group>
   )
@@ -138,8 +139,8 @@ export function Model(props: ThreeElements["group"]) {
 
 export function TeethModel() {
   return (
-    <group castShadow>
-      <group position={[0, -20, 1000]} castShadow>
+    <group>
+      <group position={[0, -20, 400]}>
         <Center>
           <Model scale={10} />
         </Center>

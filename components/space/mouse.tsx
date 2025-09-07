@@ -1,45 +1,65 @@
 import { Trail } from "@react-three/drei"
 import { useFrame, useThree } from "@react-three/fiber"
-import { useRef } from "react"
+import { useCallback, useRef } from "react"
 import { Mesh } from "three"
+import type { Vector3 } from "three"
 
-const MouseSphere = () => {
-  const meshRef = useRef<Mesh>(null!)
+type MouseSphereProps = {
+  color?: string
+  radius?: number
+  segments?: number
+  z?: number
+  trailWidth?: number
+  trailLength?: number
+  decay?: number
+  local?: boolean
+  stride?: number
+  interval?: number
+  opacity?: number
+  position?: Vector3 | [number, number, number]
+}
+
+const MouseSphere = ({
+  color = "#40E0D0",
+  radius = 0.1,
+  segments = 16,
+  z = 0,
+  trailWidth = 1.2,
+  trailLength = 2,
+  decay = 0.1,
+  local = false,
+  stride = 0,
+  interval = 1,
+  opacity = 1,
+}: MouseSphereProps) => {
+  const meshRef = useRef<Mesh | null>(null)
   const { viewport } = useThree()
 
-  useFrame(({ pointer }) => {
-    if (meshRef.current) {
-      // Convert normalized device coordinates (NDC) to world coordinates
-      // mouse.x and mouse.y are in range [-1, 1]
-      const x = (pointer.x * viewport.width) / 2
-      const y = (pointer.y * viewport.height) / 2
-      meshRef.current.position.set(x, y, 0)
+  const attenuation = useCallback((width: number) => width, [])
 
-      // Optional: Make the sphere always face the camera if it's not a perfect sphere or has a texture
-      // meshRef.current.lookAt(camera.position);
-    }
+  useFrame(({ pointer }) => {
+    const mesh = meshRef.current
+    if (!mesh) return
+    const x = (pointer.x * viewport.width) / 2
+    const y = (pointer.y * viewport.height) / 2
+    mesh.position.set(x, y, z)
   })
 
   return (
     <Trail
-      width={1.2} // Width of the line
-      color={"#40E0D0"} // Color of the line
-      length={2} // Length of the line
-      decay={1} // How fast the line fades away
-      local={false} // Wether to use the target's world or local positions
-      stride={0} // Min distance between previous and current point
-      interval={1} // Number of frames to wait before next calculation
-      target={undefined} // Optional target. This object will produce the trail.
-      attenuation={(width) => width}
+      width={trailWidth}
+      color={color}
+      length={trailLength}
+      decay={decay}
+      local={local}
+      stride={stride}
+      interval={interval}
+      attenuation={attenuation}
     >
-      {/* If `target` is not defined, Trail will use the first `Object3D` child as the target. */}
       <mesh ref={meshRef}>
-        <sphereGeometry args={[0.01, 64, 64]} />
-        <meshStandardMaterial color="#40E0D0" />
+        <sphereGeometry args={[radius, segments, segments]} />
+        <meshStandardMaterial color={color} opacity={opacity} transparent={opacity < 1} />
       </mesh>
-
-      {/* You can optionally define a custom meshLineMaterial to use. */}
-      {/* <meshLineMaterial color={"red"} /> */}
     </Trail>
   )
 }
