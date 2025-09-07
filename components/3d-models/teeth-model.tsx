@@ -107,7 +107,13 @@ export function Model(props: ThreeElements["group"]) {
     <group ref={group} {...props} dispose={null}>
       <group name='Scene'>
         <Float speed={4} rotationIntensity={0.5} floatIntensity={1.0} floatingRange={[-6, 6]}>
-          <group ref={modelRef} name='teeth' userData={{ name: "teeth" }}>
+          <group
+            ref={modelRef}
+            name='teeth'
+            userData={{ name: "teeth" }}
+            onPointerEnter={handlePointerEnter}
+            onPointerLeave={handlePointerLeave}
+          >
             <mesh
               name='mandibular'
               castShadow
@@ -116,8 +122,6 @@ export function Model(props: ThreeElements["group"]) {
               material={sharedMaterial}
               position={[0.139, -2.577, -0.337]}
               rotation={[Math.PI / 2, 0, 0]}
-              onPointerEnter={handlePointerEnter}
-              onPointerLeave={handlePointerLeave}
             />
             <mesh
               name='maxillary'
@@ -127,8 +131,6 @@ export function Model(props: ThreeElements["group"]) {
               material={sharedMaterial}
               position={[-0.139, 2.577, 0.337]}
               rotation={[Math.PI / 2, 0, 0]}
-              onPointerEnter={handlePointerEnter}
-              onPointerLeave={handlePointerLeave}
             />
           </group>
         </Float>
