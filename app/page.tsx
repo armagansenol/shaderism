@@ -20,6 +20,11 @@ export default function Page() {
               Space
             </Link>
           </li>
+          <li>
+            <Link href='/carousel' className='text-blue-500 hover:underline'>
+              Carousel
+            </Link>
+          </li>
         </ul>
       </div>
     </main>
