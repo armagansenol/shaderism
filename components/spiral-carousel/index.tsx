@@ -28,7 +28,7 @@ const INITIAL_PARAMS = {
   camX: 0,
   camY: 0,
   camZ: 2,
-  fov: 45,
+  fov: 30,
   rotXDeg: 0,
   rotYDeg: 0,
   rotZDeg: 90,
@@ -338,7 +338,7 @@ export function SpiralCarousel() {
 
     const st = ScrollTrigger.create({
       trigger: sectionRef.current,
-      start: "top top",
+      start: "center center",
       end: "+=6000",
       scrub: true,
       pin: true,
@@ -357,7 +357,7 @@ export function SpiralCarousel() {
       <div className='w-screen h-11/12 bg-black flex items-center justify-center'>
         <span className='text-white text-4xl font-bold'>BMW</span>
       </div>
-      <div ref={sectionRef} className='w-screen h-screen relative'>
+      <div ref={sectionRef} className='w-screen h-[120vh] relative'>
         <div className='w-full h-[200px] bg-gradient-to-b from-black to-black/0 z-50 absolute top-0 left-0'></div>
         <div className='w-full h-[200px] bg-gradient-to-t from-black to-black/0 z-50 absolute bottom-0 left-0'></div>
         <Canvas
@@ -392,22 +392,7 @@ export function SpiralCarousel() {
           <PostProcessingManager />
         </EffectComposer> */}
         </Canvas>
-
-        {/* Slide Number Display */}
-        <div
-          style={{
-            position: "absolute",
-            top: "20px",
-            left: "20px",
-            color: "white",
-            fontSize: "24px",
-            fontWeight: "bold",
-            fontFamily: "Arial, sans-serif",
-            textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
-            zIndex: 1000,
-            pointerEvents: "none",
-          }}
-        >
+        <div className='absolute top-1/2 left-4 transform -translate-y-1/2 z-50 pointer-events-none font-bold'>
           {currentSlide} / {SLIDE_COUNT}
         </div>
       </div>
