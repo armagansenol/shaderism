@@ -1,19 +1,15 @@
 import React, { useRef, useMemo, useEffect, useState } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
+import { useControls, folder } from "leva"
 import * as THREE from "three"
-// import { GUI } from "dat.gui"; // Removed static import
 
 // Placeholder for water normals texture - replace with your actual texture
 const waterNormalsTextureURL1 = "/water-normal-map-3.jpg" // Path for the first normal map
 // const waterNormalsTextureURL2 = "/vortex-map.png" // We'll set this aside for now, vortex is geometric
 
-// Global flag to prevent multiple GUI creation
-let globalGuiCreated = false
-
 const GridPlane = () => {
   const meshRef = useRef<THREE.Mesh>(null!)
   const materialRef = useRef<THREE.ShaderMaterial>(null!)
-  const guiRef = useRef<{ destroy: () => void } | null>(null) // Add ref to track GUI instance
 
   const { scene, camera } = useThree()
 
@@ -77,6 +73,233 @@ const GridPlane = () => {
   const frustum = useMemo(() => new THREE.Frustum(), [])
   const projScreenMatrix = useMemo(() => new THREE.Matrix4(), [])
 
+  // Function to create hourglass geometry
+  const createHourglassGeometry = (params: typeof initialParams) => {
+    const points = []
+    const segments = 20 // Number of points along the profile
+    const cylinderHeight = 1000
+
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments // 0 to 1
+
+      // Create hourglass curve using smooth interpolation
+      let radius
+      if (t <= params.waistPosition) {
+        // From bottom to waist
+        const localT = t / params.waistPosition
+        radius =
+          params.bottomRadius +
+          (params.waistRadius - params.bottomRadius) * (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
+      } else {
+        // From waist to top
+        const localT = (t - params.waistPosition) / (1 - params.waistPosition)
+        radius =
+          params.waistRadius +
+          (params.topRadius - params.waistRadius) * (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
+      }
+
+      const y = (t - 0.5) * cylinderHeight // Center the hourglass
+      points.push(new THREE.Vector2(radius, y))
+    }
+
+    return new THREE.LatheGeometry(points, 32)
+  }
+
+  // Leva controls for Grid Plane
+  useControls("Tunnel Controls", {
+    "Grid Appearance": folder({
+      "Grid Color": {
+        value: `#${initialParams.gridColor.getHexString()}`,
+        onChange: (value: string) => {
+          if (materialRef.current?.uniforms.uGridColor?.value) {
+            materialRef.current.uniforms.uGridColor.value.set(value)
+          }
+        },
+      },
+      Size: {
+        value: initialParams.size,
+        min: 0.01,
+        max: 10.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.size) {
+            materialRef.current.uniforms.size.value = value
+          }
+        },
+      },
+      "Noise Strength": {
+        value: initialParams.noiseStrength,
+        min: 0.0,
+        max: 0.5,
+        step: 0.001,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.noiseStrength) {
+            materialRef.current.uniforms.noiseStrength.value = value
+          }
+        },
+      },
+      Alpha: {
+        value: initialParams.alpha,
+        min: 0.0,
+        max: 1.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.alpha) {
+            materialRef.current.uniforms.alpha.value = value
+          }
+        },
+      },
+      "Line Thickness": {
+        value: initialParams.lineThickness,
+        min: 0.001,
+        max: 0.05,
+        step: 0.001,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.uLineThickness) {
+            materialRef.current.uniforms.uLineThickness.value = value
+          }
+        },
+      },
+      "Line Fade": {
+        value: initialParams.lineFade,
+        min: 0.0001,
+        max: 0.02,
+        step: 0.0001,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.uLineFade) {
+            materialRef.current.uniforms.uLineFade.value = value
+          }
+        },
+      },
+      "Animation Speed": {
+        value: initialParams.animationSpeed,
+        min: 0.0,
+        max: 5.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.uAnimationSpeed) {
+            materialRef.current.uniforms.uAnimationSpeed.value = value
+          }
+        },
+      },
+    }),
+    "Wavy Grid (Cylinder)": folder({
+      "Grid Density (Lengthwise)": {
+        value: initialParams.gridDensity,
+        min: 1.0,
+        max: 50.0,
+        step: 0.1,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.uGridDensity) {
+            materialRef.current.uniforms.uGridDensity.value = value
+          }
+        },
+      },
+      "Circumferential Lines": {
+        value: initialParams.numCircumferentialLines,
+        min: 0.0,
+        max: 100.0,
+        step: 1.0,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.uNumCircumferentialLines) {
+            materialRef.current.uniforms.uNumCircumferentialLines.value = value
+          }
+        },
+      },
+      "Near End Fade": {
+        value: initialParams.cylinderOpeningFade,
+        min: 0.0,
+        max: 0.5,
+        step: 0.01,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.uCylinderOpeningFade) {
+            materialRef.current.uniforms.uCylinderOpeningFade.value = value
+          }
+        },
+      },
+      "Far End Fade Start": {
+        value: initialParams.cylinderEndFadeStart,
+        min: 0.0,
+        max: 1.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.uCylinderEndFadeStart) {
+            materialRef.current.uniforms.uCylinderEndFadeStart.value = value
+          }
+        },
+      },
+      "Far End Fade Length": {
+        value: initialParams.cylinderEndFadeLength,
+        min: 0.0,
+        max: 1.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          if (materialRef.current?.uniforms.uCylinderEndFadeLength) {
+            materialRef.current.uniforms.uCylinderEndFadeLength.value = value
+          }
+        },
+      },
+    }),
+    "Hourglass Shape": folder({
+      "Top Radius": {
+        value: initialParams.topRadius,
+        min: 5.0,
+        max: 200.0,
+        step: 1.0,
+        onChange: (value: number) => {
+          const newParams = { ...initialParams, topRadius: value }
+          if (meshRef.current) {
+            const newGeometry = createHourglassGeometry(newParams)
+            meshRef.current.geometry.dispose()
+            meshRef.current.geometry = newGeometry
+          }
+        },
+      },
+      "Waist Radius": {
+        value: initialParams.waistRadius,
+        min: 5.0,
+        max: 100.0,
+        step: 1.0,
+        onChange: (value: number) => {
+          const newParams = { ...initialParams, waistRadius: value }
+          if (meshRef.current) {
+            const newGeometry = createHourglassGeometry(newParams)
+            meshRef.current.geometry.dispose()
+            meshRef.current.geometry = newGeometry
+          }
+        },
+      },
+      "Bottom Radius": {
+        value: initialParams.bottomRadius,
+        min: 5.0,
+        max: 150.0,
+        step: 1.0,
+        onChange: (value: number) => {
+          const newParams = { ...initialParams, bottomRadius: value }
+          if (meshRef.current) {
+            const newGeometry = createHourglassGeometry(newParams)
+            meshRef.current.geometry.dispose()
+            meshRef.current.geometry = newGeometry
+          }
+        },
+      },
+      "Waist Position": {
+        value: initialParams.waistPosition,
+        min: 0.2,
+        max: 0.8,
+        step: 0.01,
+        onChange: (value: number) => {
+          const newParams = { ...initialParams, waistPosition: value }
+          if (meshRef.current) {
+            const newGeometry = createHourglassGeometry(newParams)
+            meshRef.current.geometry.dispose()
+            meshRef.current.geometry = newGeometry
+          }
+        },
+      },
+    }),
+  })
+
   useEffect(() => {
     if (meshRef.current) {
       meshRef.current.geometry.computeBoundingSphere()
@@ -91,199 +314,6 @@ const GridPlane = () => {
       materialRef.current.uniforms.normalSampler1.value = normalSampler1
     }
   }, [normalSampler1])
-
-  useEffect(() => {
-    if (!materialRef.current?.uniforms) return
-    if (guiRef.current) return // Prevent creating multiple GUIs
-    if (globalGuiCreated) return // Global check to prevent any duplicate GUI
-
-    // Dynamically import dat.gui only on the client side
-    if (typeof window !== "undefined") {
-      import("dat.gui")
-        .then((dat) => {
-          if (globalGuiCreated) return // Double-check in case another instance started creating GUI
-
-          const GUI = dat.GUI // Access GUI constructor from the imported module
-          const gui = new GUI()
-          guiRef.current = gui // Store the GUI instance
-          globalGuiCreated = true // Mark as created globally
-          const guiFolder = gui.addFolder("Tunnel Controls")
-
-          const guiParams = {
-            gridColor: `#${initialParams.gridColor.getHexString()}`,
-            size: initialParams.size,
-            noiseStrength: initialParams.noiseStrength,
-            alpha: initialParams.alpha,
-            lineThickness: initialParams.lineThickness,
-            lineFade: initialParams.lineFade,
-            animationSpeed: initialParams.animationSpeed,
-          }
-
-          guiFolder.addColor(guiParams, "gridColor").onChange((value: string) => {
-            materialRef.current?.uniforms.uGridColor?.value.set(value)
-          })
-          guiFolder.add(guiParams, "size", 0.01, 10.0, 0.01).onChange((value: number) => {
-            materialRef.current.uniforms.size.value = value
-          })
-          guiFolder.add(guiParams, "noiseStrength", 0.0, 0.5, 0.001).onChange((value: number) => {
-            materialRef.current.uniforms.noiseStrength.value = value
-          })
-          guiFolder.add(guiParams, "alpha", 0.0, 1.0, 0.01).onChange((value: number) => {
-            materialRef.current.uniforms.alpha.value = value
-          })
-          guiFolder.add(guiParams, "lineThickness", 0.001, 0.05, 0.001).onChange((value: number) => {
-            materialRef.current.uniforms.uLineThickness.value = value
-          })
-          guiFolder.add(guiParams, "lineFade", 0.0001, 0.02, 0.0001).onChange((value: number) => {
-            materialRef.current.uniforms.uLineFade.value = value
-          })
-          guiFolder.add(guiParams, "animationSpeed", 0.0, 5.0, 0.01).onChange((value: number) => {
-            materialRef.current.uniforms.uAnimationSpeed.value = value
-          })
-
-          const flatGridFolder = guiFolder.addFolder("Wavy Grid (Cylinder)")
-          flatGridFolder
-            .add(initialParams, "size", 0.01, 10.0, 0.01)
-            .name("Noise Scale")
-            .onChange((value: number) => {
-              materialRef.current.uniforms.size.value = value
-            })
-          flatGridFolder
-            .add(initialParams, "noiseStrength", 0.0, 0.5, 0.001)
-            .name("Noise Strength")
-            .onChange((value: number) => {
-              materialRef.current.uniforms.noiseStrength.value = value
-            })
-          flatGridFolder
-            .add(initialParams, "gridDensity", 1.0, 50.0, 0.1)
-            .name("Grid Density (Lengthwise)")
-            .onChange((value: number) => {
-              materialRef.current.uniforms.uGridDensity.value = value
-            })
-          flatGridFolder
-            .add(initialParams, "numCircumferentialLines", 0.0, 100.0, 1.0)
-            .name("Circumferential Lines")
-            .onChange((value: number) => {
-              materialRef.current.uniforms.uNumCircumferentialLines.value = value
-            })
-          // Add GUI controls for new fading parameters
-          flatGridFolder
-            .add(initialParams, "cylinderOpeningFade", 0.0, 0.5, 0.01)
-            .name("Near End Fade")
-            .onChange((value: number) => {
-              materialRef.current.uniforms.uCylinderOpeningFade.value = value
-            })
-          flatGridFolder
-            .add(initialParams, "cylinderEndFadeStart", 0.0, 1.0, 0.01)
-            .name("Far End Fade Start")
-            .onChange((value: number) => {
-              materialRef.current.uniforms.uCylinderEndFadeStart.value = value
-            })
-          flatGridFolder
-            .add(initialParams, "cylinderEndFadeLength", 0.0, 1.0, 0.01)
-            .name("Far End Fade Length")
-            .onChange((value: number) => {
-              materialRef.current.uniforms.uCylinderEndFadeLength.value = value
-            })
-
-          // Add hourglass shape controls
-          const createHourglassGeometry = () => {
-            const points = []
-            const segments = 20 // Number of points along the profile
-
-            for (let i = 0; i <= segments; i++) {
-              const t = i / segments // 0 to 1
-
-              // Create hourglass curve using smooth interpolation
-              let radius
-              if (t <= initialParams.waistPosition) {
-                // From bottom to waist
-                const localT = t / initialParams.waistPosition
-                radius =
-                  initialParams.bottomRadius +
-                  (initialParams.waistRadius - initialParams.bottomRadius) *
-                    (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
-              } else {
-                // From waist to top
-                const localT = (t - initialParams.waistPosition) / (1 - initialParams.waistPosition)
-                radius =
-                  initialParams.waistRadius +
-                  (initialParams.topRadius - initialParams.waistRadius) *
-                    (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
-              }
-
-              const y = (t - 0.5) * cylinderHeight // Center the hourglass
-              points.push(new THREE.Vector2(radius, y))
-            }
-
-            return new THREE.LatheGeometry(points, 32)
-          }
-
-          const hourglassFolder = guiFolder.addFolder("Hourglass Shape")
-          hourglassFolder
-            .add(initialParams, "topRadius", 5.0, 200.0, 1.0)
-            .name("Top Radius")
-            .onChange(() => {
-              if (meshRef.current) {
-                const newGeometry = createHourglassGeometry()
-                meshRef.current.geometry.dispose()
-                meshRef.current.geometry = newGeometry
-              }
-            })
-          hourglassFolder
-            .add(initialParams, "waistRadius", 5.0, 100.0, 1.0)
-            .name("Waist Radius")
-            .onChange(() => {
-              if (meshRef.current) {
-                const newGeometry = createHourglassGeometry()
-                meshRef.current.geometry.dispose()
-                meshRef.current.geometry = newGeometry
-              }
-            })
-          hourglassFolder
-            .add(initialParams, "bottomRadius", 5.0, 150.0, 1.0)
-            .name("Bottom Radius")
-            .onChange(() => {
-              if (meshRef.current) {
-                const newGeometry = createHourglassGeometry()
-                meshRef.current.geometry.dispose()
-                meshRef.current.geometry = newGeometry
-              }
-            })
-          hourglassFolder
-            .add(initialParams, "waistPosition", 0.2, 0.8, 0.01)
-            .name("Waist Position")
-            .onChange(() => {
-              if (meshRef.current) {
-                const newGeometry = createHourglassGeometry()
-                meshRef.current.geometry.dispose()
-                meshRef.current.geometry = newGeometry
-              }
-            })
-
-          if (gui.domElement) {
-            gui.domElement.style.zIndex = "9999"
-          }
-
-          // Store the gui instance if you need to destroy it from outside this promise
-          // For now, returning the destroy function for useEffect cleanup
-          return () => {
-            gui.destroy()
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to load dat.gui", error)
-        })
-    }
-    // Cleanup function to destroy GUI when component unmounts
-    return () => {
-      if (guiRef.current) {
-        guiRef.current.destroy()
-        guiRef.current = null
-        globalGuiCreated = false // Reset global flag
-      }
-    }
-  }, [initialParams]) // Removed setIsVortexActive from dependencies
 
   useFrame(({ clock }) => {
     if (!materialRef.current || !normalSampler1 || !meshRef.current || !boundingSphere) return
@@ -409,38 +439,6 @@ const GridPlane = () => {
   // Height is along Y by default. Rotate to make it along Z.
   const cylinderHeight = 1050
 
-  // Create hourglass geometry
-  const createHourglassGeometry = () => {
-    const points = []
-    const segments = 20 // Number of points along the profile
-
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments // 0 to 1
-
-      // Create hourglass curve using smooth interpolation
-      let radius
-      if (t <= initialParams.waistPosition) {
-        // From bottom to waist
-        const localT = t / initialParams.waistPosition
-        radius =
-          initialParams.bottomRadius +
-          (initialParams.waistRadius - initialParams.bottomRadius) *
-            (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
-      } else {
-        // From waist to top
-        const localT = (t - initialParams.waistPosition) / (1 - initialParams.waistPosition)
-        radius =
-          initialParams.waistRadius +
-          (initialParams.topRadius - initialParams.waistRadius) * (3 * localT * localT - 2 * localT * localT * localT) // Smooth curve
-      }
-
-      const y = (t - 0.5) * cylinderHeight // Center the hourglass
-      points.push(new THREE.Vector2(radius, y))
-    }
-
-    return new THREE.LatheGeometry(points, 32)
-  }
-
   return (
     <mesh
       ref={meshRef}
@@ -449,7 +447,7 @@ const GridPlane = () => {
       rotation={[Math.PI / 2, 0, 0]}
       position={[0, 0, cylinderHeight / 2]} // Position so one end is near origin if camera looks at 0,0,0
     >
-      {React.createElement("primitive", { object: createHourglassGeometry() })}
+      {React.createElement("primitive", { object: createHourglassGeometry(initialParams) })}
       <shaderMaterial
         ref={materialRef}
         args={[

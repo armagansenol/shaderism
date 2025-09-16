@@ -142,9 +142,9 @@ export function Model(props: ThreeElements["group"]) {
 export function TeethModel() {
   return (
     <group>
-      <group position={[0, -20, 400]}>
+      <group position={[0, -20, -3000]}>
         <Center>
-          <Model scale={10} />
+          <Model scale={5} />
         </Center>
       </group>
     </group>

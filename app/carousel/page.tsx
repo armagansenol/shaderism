@@ -1,11 +1,15 @@
-import SpiralCarousel from "@/components/spiral-carousel"
+import { BarrelCarousel } from "@/components/barrel-carousel"
 
 export default function Page() {
   return (
-    <div style={{ height: "100vh" }}>
-      <div style={{ position: "absolute", inset: 0 }}>
-        <SpiralCarousel />
+    <>
+      <div className='w-screen h-screen bg-black flex items-center justify-center'>
+        <span className='text-white text-4xl font-bold'>BMW</span>
       </div>
-    </div>
+      <BarrelCarousel />
+      <div className='w-screen h-screen bg-black flex items-center justify-center'>
+        <span className='text-white text-4xl font-bold'>BMW</span>
+      </div>
+    </>
   )
 }

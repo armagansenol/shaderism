@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useRef, useMemo } from "react"
 import { Effect, PixelationEffect, EffectPass } from "postprocessing"
 import { useThree } from "@react-three/fiber"
+import { useControls, folder, button } from "leva"
 import * as THREE from "three"
 
 const fragmentShader = `
@@ -10,6 +11,10 @@ const fragmentShader = `
   
   // Curvature
   uniform float barrelPower;
+  // Motion-driven curvature
+  uniform float motionVelocity;      // computed on CPU from camera speed (units/sec)
+  uniform float velocityBarrelGain;  // how much velocity adds to barrel
+  uniform float velocityBarrelMax;   // clamp for effective barrel power
   // Color bleeding
   uniform float colorBleeding;
   uniform float bleedingRangeX;
@@ -32,7 +37,11 @@ const fragmentShader = `
   vec2 distort(vec2 p) {
     float angle = p.y / p.x;
     float theta = atan(p.y, p.x);
-    float radius = pow(length(p), barrelPower);
+    // Compute motion-influenced barrel power
+    float motionContribution = clamp(motionVelocity * velocityBarrelGain, 0.0, max(0.0, velocityBarrelMax - barrelPower));
+    float effectiveBarrel = clamp(barrelPower + motionContribution, 0.0, velocityBarrelMax);
+
+    float radius = pow(length(p), effectiveBarrel);
 
     p.x = radius * cos(theta);
     p.y = radius * sin(theta);
@@ -192,20 +201,30 @@ const PRESETS = {
 }
 
 class CRTEffect extends Effect {
-  constructor({
-    fadeOut = 1.0,
-    barrelPower = PRESETS["Old TV"].barrelPower,
-    colorBleeding = PRESETS["Old TV"].colorBleeding,
-    bleedingRangeX = PRESETS["Old TV"].bleedingRangeX,
-    bleedingRangeY = PRESETS["Old TV"].bleedingRangeY,
-    linesDistance = PRESETS["Old TV"].linesDistance,
-    scanSize = PRESETS["Old TV"].scanSize,
-    scanlineAlpha = PRESETS["Old TV"].scanlineAlpha,
-    linesVelocity = PRESETS["Old TV"].linesVelocity,
-    noiseIntensity = PRESETS["Old TV"].noiseIntensity,
-    noiseScale = PRESETS["Old TV"].noiseScale,
-    noiseSpeed = PRESETS["Old TV"].noiseSpeed,
-  } = {}) {
+  private camera: THREE.Camera | null
+  private prevCameraPosition: THREE.Vector3 | null
+  private smoothedVelocity: number
+  private velocitySmoothing: number
+  constructor(
+    {
+      fadeOut = 1.0,
+      barrelPower = PRESETS["Old TV"].barrelPower,
+      colorBleeding = PRESETS["Old TV"].colorBleeding,
+      bleedingRangeX = PRESETS["Old TV"].bleedingRangeX,
+      bleedingRangeY = PRESETS["Old TV"].bleedingRangeY,
+      linesDistance = PRESETS["Old TV"].linesDistance,
+      scanSize = PRESETS["Old TV"].scanSize,
+      scanlineAlpha = PRESETS["Old TV"].scanlineAlpha,
+      linesVelocity = PRESETS["Old TV"].linesVelocity,
+      noiseIntensity = PRESETS["Old TV"].noiseIntensity,
+      noiseScale = PRESETS["Old TV"].noiseScale,
+      noiseSpeed = PRESETS["Old TV"].noiseSpeed,
+      velocityBarrelGain = 0.002,
+      velocityBarrelMax = 5.0,
+      velocitySmoothing = 0.15,
+    } = {},
+    camera?: THREE.Camera
+  ) {
     super("CRTEffect", fragmentShader, {
       // @ts-expect-error - postprocessing library requires flexible uniform types
       uniforms: new Map([
@@ -213,6 +232,10 @@ class CRTEffect extends Effect {
         ["resolution", new THREE.Uniform(new THREE.Vector2(1920, 1080))],
         ["fadeOut", new THREE.Uniform(fadeOut)],
         ["barrelPower", new THREE.Uniform(barrelPower)],
+        // Motion uniforms
+        ["motionVelocity", new THREE.Uniform(0.0)],
+        ["velocityBarrelGain", new THREE.Uniform(velocityBarrelGain)],
+        ["velocityBarrelMax", new THREE.Uniform(velocityBarrelMax)],
         ["colorBleeding", new THREE.Uniform(colorBleeding)],
         ["bleedingRangeX", new THREE.Uniform(bleedingRangeX)],
         ["bleedingRangeY", new THREE.Uniform(bleedingRangeY)],
@@ -225,11 +248,26 @@ class CRTEffect extends Effect {
         ["noiseSpeed", new THREE.Uniform(noiseSpeed)],
       ]),
     })
+    this.camera = camera ?? null
+    this.prevCameraPosition = this.camera ? this.camera.position.clone() : null
+    this.smoothedVelocity = 0
+    this.velocitySmoothing = Math.max(0, Math.min(1, velocitySmoothing))
   }
 
   update(renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget, deltaTime: number) {
     this.uniforms.get("time")!.value += deltaTime
     this.uniforms.get("resolution")!.value.set(inputBuffer.width, inputBuffer.height)
+
+    // Update motion velocity from camera movement (units/second)
+    if (this.camera && this.prevCameraPosition) {
+      const current = this.camera.position
+      const distance = current.distanceTo(this.prevCameraPosition)
+      const instantaneous = distance / Math.max(deltaTime, 1e-6)
+      this.smoothedVelocity += (instantaneous - this.smoothedVelocity) * this.velocitySmoothing
+      const uniform = this.uniforms.get("motionVelocity")
+      if (uniform) uniform.value = this.smoothedVelocity
+      this.prevCameraPosition.copy(current)
+    }
   }
 
   // Method to update uniform values
@@ -341,14 +379,17 @@ interface CRTParams {
   noiseScale?: number
   noiseSpeed?: number
   pixelationGranularity?: number
+  velocityBarrelGain?: number
+  velocityBarrelMax?: number
+  velocitySmoothing?: number
 }
 
 const CRTPostEffect = forwardRef<CRTEffect, CRTParams>((props, ref) => {
   const effectRef = useRef<CRTEffect>(null!)
   const pixelationRef = useRef<PixelationEffect>(null!)
-  const guiRef = useRef<unknown>(null)
 
-  const effect = useMemo(() => new CRTEffect(props), [props])
+  const { camera } = useThree()
+  const effect = useMemo(() => new CRTEffect(props, camera as unknown as THREE.Camera), [props, camera])
   const pixelationEffect = useMemo(
     () => new PixelationEffect(props.pixelationGranularity ?? 5),
     [props.pixelationGranularity]
@@ -363,212 +404,192 @@ const CRTPostEffect = forwardRef<CRTEffect, CRTParams>((props, ref) => {
     pixelationRef.current = pixelationEffect
   }, [effect, pixelationEffect, ref])
 
-  useEffect(() => {
-    if (guiRef.current) return // Prevent creating multiple GUIs
-
-    // Dynamically import dat.gui only on the client side
-    if (typeof window !== "undefined") {
-      import("dat.gui")
-        .then((dat) => {
-          if (guiRef.current) return // Double-check in case another instance started creating GUI
-
-          const GUI = dat.GUI
-          const gui = new GUI()
-          guiRef.current = gui
-
-          const crtFolder = gui.addFolder("CRT Monitor Effects")
-
-          // Curvature controls
-          const curvatureFolder = crtFolder.addFolder("Screen Curvature")
-          curvatureFolder
-            .add({ barrelPower: props.barrelPower ?? PRESETS["Old TV"].barrelPower }, "barrelPower", 1.0, 2.0, 0.01)
-            .name("Barrel Distortion")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ barrelPower: value })
-            })
-
-          // Color bleeding controls
-          const bleedingFolder = crtFolder.addFolder("Color Bleeding")
-          bleedingFolder
-            .add(
-              { colorBleeding: props.colorBleeding ?? PRESETS["Old TV"].colorBleeding },
-              "colorBleeding",
-              0.0,
-              2.0,
-              0.01
-            )
-            .name("Bleeding Intensity")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ colorBleeding: value })
-            })
-
-          bleedingFolder
-            .add(
-              { bleedingRangeX: props.bleedingRangeX ?? PRESETS["Old TV"].bleedingRangeX },
-              "bleedingRangeX",
-              0.0,
-              10.0,
-              0.1
-            )
-            .name("Horizontal Range")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ bleedingRangeX: value })
-            })
-
-          bleedingFolder
-            .add(
-              { bleedingRangeY: props.bleedingRangeY ?? PRESETS["Old TV"].bleedingRangeY },
-              "bleedingRangeY",
-              0.0,
-              10.0,
-              0.1
-            )
-            .name("Vertical Range")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ bleedingRangeY: value })
-            })
-
-          // Scanline controls
-          const scanlineFolder = crtFolder.addFolder("Scanlines")
-          scanlineFolder
-            .add(
-              { linesDistance: props.linesDistance ?? PRESETS["Old TV"].linesDistance },
-              "linesDistance",
-              1.0,
-              20.0,
-              0.1
-            )
-            .name("Line Distance")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ linesDistance: value })
-            })
-
-          scanlineFolder
-            .add({ scanSize: props.scanSize ?? PRESETS["Old TV"].scanSize }, "scanSize", 0.5, 10.0, 0.1)
-            .name("Scan Size")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ scanSize: value })
-            })
-
-          scanlineFolder
-            .add(
-              { scanlineAlpha: props.scanlineAlpha ?? PRESETS["Old TV"].scanlineAlpha },
-              "scanlineAlpha",
-              0.0,
-              1.0,
-              0.01
-            )
-            .name("Scanline Alpha")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ scanlineAlpha: value })
-            })
-
-          scanlineFolder
-            .add(
-              { linesVelocity: props.linesVelocity ?? PRESETS["Old TV"].linesVelocity },
-              "linesVelocity",
-              0.0,
-              100.0,
-              1.0
-            )
-            .name("Animation Speed")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ linesVelocity: value })
-            })
-
-          // Noise overlay controls
-          const noiseFolder = crtFolder.addFolder("Noise Overlay")
-          noiseFolder
-            .add(
-              { noiseIntensity: props.noiseIntensity ?? PRESETS["Old TV"].noiseIntensity },
-              "noiseIntensity",
-              0.0,
-              1.0,
-              0.01
-            )
-            .name("Grain Intensity")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ noiseIntensity: value })
-            })
-
-          noiseFolder
-            .add({ noiseScale: props.noiseScale ?? PRESETS["Old TV"].noiseScale }, "noiseScale", 10.0, 1000.0, 10.0)
-            .name("Grain Size")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ noiseScale: value })
-            })
-
-          noiseFolder
-            .add({ noiseSpeed: props.noiseSpeed ?? PRESETS["Old TV"].noiseSpeed }, "noiseSpeed", 0.0, 5.0, 0.1)
-            .name("Animation Speed")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ noiseSpeed: value })
-            })
-
-          // Pixelation controls
-          const pixelationFolder = crtFolder.addFolder("Pixelation")
-          pixelationFolder
-            .add({ granularity: props.pixelationGranularity ?? 5 }, "granularity", 1, 100, 1)
-            .name("Pixel Size")
-            .onChange((value: number) => {
-              if (pixelationRef.current) {
-                pixelationRef.current.granularity = value
-              }
-            })
-
-          // Global controls
-          const globalFolder = crtFolder.addFolder("Global")
-          globalFolder
-            .add({ fadeOut: props.fadeOut ?? 1.0 }, "fadeOut", 0.0, 1.0, 0.01)
-            .name("Effect Intensity")
-            .onChange((value: number) => {
-              effectRef.current?.updateUniforms({ fadeOut: value })
-            })
-
-          // Add presets
-          const presets = {
-            "Classic CRT": () => {
-              effectRef.current?.updateUniforms(PRESETS["Classic CRT"])
-            },
-            "Strong Scanlines": () => {
-              effectRef.current?.updateUniforms(PRESETS["Strong Scanlines"])
-            },
-            "Subtle Monitor": () => {
-              effectRef.current?.updateUniforms(PRESETS["Subtle Monitor"])
-            },
-            "Old TV": () => {
-              effectRef.current?.updateUniforms(PRESETS["Old TV"])
-            },
-            Clean: () => {
-              effectRef.current?.updateUniforms(PRESETS.Clean)
-            },
+  // Leva controls for CRT effects
+  useControls("CRT Monitor Effects", {
+    "Screen Curvature": folder({
+      "Barrel Distortion": {
+        value: props.barrelPower ?? PRESETS["Old TV"].barrelPower,
+        min: 1.0,
+        max: 2.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ barrelPower: value })
+        },
+      },
+    }),
+    "Color Bleeding": folder({
+      "Bleeding Intensity": {
+        value: props.colorBleeding ?? PRESETS["Old TV"].colorBleeding,
+        min: 0.0,
+        max: 2.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ colorBleeding: value })
+        },
+      },
+      "Horizontal Range": {
+        value: props.bleedingRangeX ?? PRESETS["Old TV"].bleedingRangeX,
+        min: 0.0,
+        max: 10.0,
+        step: 0.1,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ bleedingRangeX: value })
+        },
+      },
+      "Vertical Range": {
+        value: props.bleedingRangeY ?? PRESETS["Old TV"].bleedingRangeY,
+        min: 0.0,
+        max: 10.0,
+        step: 0.1,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ bleedingRangeY: value })
+        },
+      },
+    }),
+    Scanlines: folder({
+      "Line Distance": {
+        value: props.linesDistance ?? PRESETS["Old TV"].linesDistance,
+        min: 1.0,
+        max: 20.0,
+        step: 0.1,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ linesDistance: value })
+        },
+      },
+      "Scan Size": {
+        value: props.scanSize ?? PRESETS["Old TV"].scanSize,
+        min: 0.5,
+        max: 10.0,
+        step: 0.1,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ scanSize: value })
+        },
+      },
+      "Scanline Alpha": {
+        value: props.scanlineAlpha ?? PRESETS["Old TV"].scanlineAlpha,
+        min: 0.0,
+        max: 1.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ scanlineAlpha: value })
+        },
+      },
+      "Animation Speed": {
+        value: props.linesVelocity ?? PRESETS["Old TV"].linesVelocity,
+        min: 0.0,
+        max: 100.0,
+        step: 1.0,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ linesVelocity: value })
+        },
+      },
+    }),
+    "Noise Overlay": folder({
+      "Grain Intensity": {
+        value: props.noiseIntensity ?? PRESETS["Old TV"].noiseIntensity,
+        min: 0.0,
+        max: 1.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ noiseIntensity: value })
+        },
+      },
+      "Grain Size": {
+        value: props.noiseScale ?? PRESETS["Old TV"].noiseScale,
+        min: 10.0,
+        max: 1000.0,
+        step: 10.0,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ noiseScale: value })
+        },
+      },
+      "Noise Animation Speed": {
+        value: props.noiseSpeed ?? PRESETS["Old TV"].noiseSpeed,
+        min: 0.0,
+        max: 5.0,
+        step: 0.1,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ noiseSpeed: value })
+        },
+      },
+    }),
+    Pixelation: folder({
+      "Pixel Size": {
+        value: props.pixelationGranularity ?? 5,
+        min: 1,
+        max: 100,
+        step: 1,
+        onChange: (value: number) => {
+          if (pixelationRef.current) {
+            pixelationRef.current.granularity = value
           }
+        },
+      },
+    }),
+    "Motion Response": folder({
+      "Barrel Gain": {
+        value: props.velocityBarrelGain ?? 0.002,
+        min: 0.0,
+        max: 0.01,
+        step: 0.0001,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ velocityBarrelGain: value })
+        },
+      },
+      "Max Barrel": {
+        value: props.velocityBarrelMax ?? 5.0,
+        min: 1.0,
+        max: 10.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ velocityBarrelMax: value })
+        },
+      },
+      "Velocity Smoothing": {
+        value: props.velocitySmoothing ?? 0.15,
+        min: 0.0,
+        max: 1.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          if (effectRef.current) {
+            ;(effectRef.current as unknown as { velocitySmoothing: number }).velocitySmoothing = Math.max(
+              0,
+              Math.min(1, value)
+            )
+          }
+        },
+      },
+    }),
+    Global: folder({
+      "Effect Intensity": {
+        value: props.fadeOut ?? 1.0,
+        min: 0.0,
+        max: 1.0,
+        step: 0.01,
+        onChange: (value: number) => {
+          effectRef.current?.updateUniforms({ fadeOut: value })
+        },
+      },
+    }),
+    Presets: folder({
+      "Classic CRT": button(() => {
+        effectRef.current?.updateUniforms(PRESETS["Classic CRT"])
+      }),
+      "Strong Scanlines": button(() => {
+        effectRef.current?.updateUniforms(PRESETS["Strong Scanlines"])
+      }),
+      "Subtle Monitor": button(() => {
+        effectRef.current?.updateUniforms(PRESETS["Subtle Monitor"])
+      }),
+      "Old TV": button(() => {
+        effectRef.current?.updateUniforms(PRESETS["Old TV"])
+      }),
+      Clean: button(() => {
+        effectRef.current?.updateUniforms(PRESETS.Clean)
+      }),
+    }),
+  })
 
-          const presetFolder = crtFolder.addFolder("Presets")
-          Object.entries(presets).forEach(([name, func]) => {
-            presetFolder.add({ [name]: func }, name)
-          })
-        })
-        .catch((error) => {
-          console.error("Failed to load dat.gui:", error)
-        })
-    }
-
-    // Cleanup function to destroy GUI when component unmounts
-    return () => {
-      if (
-        guiRef.current &&
-        typeof guiRef.current === "object" &&
-        guiRef.current !== null &&
-        "destroy" in guiRef.current
-      ) {
-        ;(guiRef.current as { destroy: () => void }).destroy()
-        guiRef.current = null
-      }
-    }
-  }, [props])
-
-  const { camera } = useThree()
   const effectPass = useMemo(
     () => new EffectPass(camera as unknown as THREE.Camera, effect, pixelationEffect),
     [camera, effect, pixelationEffect]

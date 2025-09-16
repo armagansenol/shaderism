@@ -5,9 +5,10 @@ import { TeethModel } from "@/components/3d-models/teeth-model"
 import { PostProcessingManager, PostProcessingManagerRef } from "@/components/space/post-processing-manager"
 import { Starfield } from "@/components/space/starfield"
 import { UnifiedCamera, UnifiedCameraRef } from "@/components/space/unified-camera"
-import { AdaptiveDpr, Float, OrbitControls, Stats, Text } from "@react-three/drei"
+import { AdaptiveDpr, OrbitControls, Stats, Text } from "@react-three/drei"
 import { Canvas } from "@react-three/fiber"
 import { EffectComposer } from "@react-three/postprocessing"
+// import gsap from "gsap"
 import { useLenis } from "lenis/react"
 import { useEffect, useRef, useState } from "react"
 
@@ -15,6 +16,8 @@ export default function Page() {
   const lenis = useLenis()
   const postProcessingRef = useRef<PostProcessingManagerRef>(null)
   const cameraRef = useRef<UnifiedCameraRef>(null)
+
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const [screenWidth, setScreenWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 0)
   const [startIntroAnimation, setStartIntroAnimation] = useState(false)
@@ -74,6 +77,12 @@ export default function Page() {
   }
 
   const handleEnterClick = () => {
+    // gsap.to(canvasRef.current, {
+    //   opacity: 0,
+    //   delay: 1.5,
+    //   duration: 1,
+    // })
+
     // Trigger barrel distortion transition tied to the camera animation timing
     if (postProcessingRef.current) {
       postProcessingRef.current.animateBarrelDistortionTransition()
@@ -108,20 +117,20 @@ export default function Page() {
     <>
       <div className='h-screen w-screen bg-black relative'>
         <button
-          className='absolute bottom-4 right-4 text-white text-xs border border-white/20 px-3 py-1 rounded z-10'
+          className='absolute bottom-4 right-4 text-white text-xs border border-white/20 px-3 py-1 rounded z-30'
           onClick={toggleOrbit}
         >
           {orbitEnabled ? "Disable" : "Enable"} Orbit (O)
         </button>
         {showButton && (
           <button
-            className='font-bold underline absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-sm border-none rounded-md bg-transparent cursor-pointer z-10'
+            className='font-bold absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white text-sm border-none rounded-md bg-transparent cursor-pointer z-30'
             onClick={handleEnterClick}
           >
-            START
+            ENTER
           </button>
         )}
-        <Canvas className='absolute top-0 left-0' shadows dpr={[1, 1.5]}>
+        <Canvas className='absolute top-0 left-0 w-full h-full z-20' shadows dpr={[1, 1.5]} ref={canvasRef}>
           {orbitEnabled && <OrbitControls makeDefault />}
           <UnifiedCamera
             ref={cameraRef}
@@ -134,39 +143,65 @@ export default function Page() {
             mouseSensitivity={1.2}
             onAnimationComplete={handleIntroAnimationComplete}
           />
-          <color attach='background' args={["black"]} />
-          <ambientLight intensity={2} />
-          <LogoBytemywork color='#fff' scale={10} position={[0, 150, 1100]} />
-          <Text color='white' position={[350, 80, 1000]} fontSize={16} fontWeight={400}>
+          <color attach='background' args={["#000000"]} />
+          <ambientLight intensity={3} />
+          <LogoBytemywork color='white' scale={10} position={[0, 200, -500]} />
+          <Text color='white' position={[280, 100, -500]} fontSize={14} fontWeight={400}>
             WEB DESIGN & DEV AGENCY
           </Text>
-          <Text color='white' position={[0, -300, 1000]} fontSize={16} fontWeight={400}>
+          <Text color='white' position={[0, -200, -500]} fontSize={16} fontWeight={400}>
             WE ARE ABOUT DIGITAL EXPERIENCE & DESIGN
           </Text>
           <Starfield />
           {/* <GridPlane /> */}
           <TeethModel />
-          <Float speed={1.5} rotationIntensity={0.5} floatIntensity={1.8}>
-            <Text color='white' scale={0.025} position={[0, -5, 0]} fontSize={100} fontWeight={700}>
+          {/* <Float speed={1.5} rotationIntensity={0.5} floatIntensity={1.8}>
+            <Text
+              color='white'
+              scale={0.025}
+              position={[0, 5, 0]}
+              fontSize={100}
+              fontWeight={900}
+              font='/fonts/alexandria/Alexandria-Black.ttf'
+            >
               BRANDING
             </Text>
           </Float>
           <Float speed={1.2} rotationIntensity={0.5} floatIntensity={2.0}>
-            <Text color='white' scale={0.025} position={[0, 0, 0]} fontSize={100} fontWeight={700}>
+            <Text
+              color='white'
+              scale={0.025}
+              position={[0, -5, 0]}
+              fontSize={100}
+              fontWeight={900}
+              font='/fonts/alexandria/Alexandria-Black.ttf'
+            >
               WEB DESIGN
             </Text>
           </Float>
           <Float speed={1.8} rotationIntensity={0.5} floatIntensity={1.6}>
-            <Text color='white' scale={0.025} position={[0, 5, 0]} fontSize={100} fontWeight={700}>
+            <Text
+              color='white'
+              scale={0.025}
+              position={[0, 0, 0]}
+              fontSize={100}
+              fontWeight={900}
+              font='/fonts/alexandria/Alexandria-Black.ttf'
+            >
               WEB DEVELOPMENT
             </Text>
-          </Float>
+          </Float> */}
           <EffectComposer>
             <PostProcessingManager ref={postProcessingRef} enableGUI={true} />
           </EffectComposer>
           <Stats />
           <AdaptiveDpr pixelated />
         </Canvas>
+        <div className='absolute top-0 left-0 w-full h-full flex items-center justify-center z-10'>
+          <h1>
+            <span>HERO</span>
+          </h1>
+        </div>
       </div>
       <div className='h-screen w-screen bg-black'>SECTION 1</div>
       <div className='h-screen w-screen bg-black'>SECTION 2</div>

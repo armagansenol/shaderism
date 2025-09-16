@@ -2,7 +2,7 @@
 
 import { PerspectiveCamera as DreiPerspectiveCamera } from "@react-three/drei"
 import { useFrame, useThree } from "@react-three/fiber"
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react"
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react"
 import * as THREE from "three"
 
 // Easing function
@@ -40,6 +40,7 @@ interface UnifiedCameraProps {
   // Camera settings
   fovMobile?: number
   fovDesktop?: number
+  mobileBreakpoint?: number
   near?: number
   far?: number
   lookAtTarget?: [number, number, number]
@@ -67,16 +68,17 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
       screenWidth,
       fovMobile = 45,
       fovDesktop = 75,
+      mobileBreakpoint = 768,
       near = 0.1,
       far = 2000,
       lookAtTarget = [0, 0, 0],
       initialPosition = [0, 0, 20],
       mouseEnabled = true,
-      mouseLimitX = 8,
-      mouseLimitY = 5,
+      mouseLimitX = 2,
+      mouseLimitY = 1,
       mouseSmoothing = 0.03,
       cameraLerpFactor = 0.1,
-      mouseSensitivity = 1.2,
+      mouseSensitivity = 0.2,
       invertX = false,
       invertY = false,
       onAnimationComplete,
@@ -109,7 +111,17 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
     // Look at target
     const lookAtTargetRef = useRef(new THREE.Vector3(...lookAtTarget))
 
-    const fov = screenWidth < 768 ? fovMobile : fovDesktop
+    const fov = useMemo(
+      () => (screenWidth < mobileBreakpoint ? fovMobile : fovDesktop),
+      [screenWidth, fovMobile, fovDesktop, mobileBreakpoint]
+    )
+
+    // Utility to apply current lookAt target
+    const applyLookAt = () => {
+      if (cameraRef.current) {
+        cameraRef.current.lookAt(lookAtTargetRef.current)
+      }
+    }
 
     // Expose methods to parent component
     useImperativeHandle(ref, () => ({
@@ -120,11 +132,11 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
           animationStartZRef.current = fromZ
           animationEndZRef.current = toZ
           animationDurationRef.current = duration
-          animationStartTimeRef.current = Date.now()
+          animationStartTimeRef.current = performance.now()
 
           // Set initial position for animation, preserving X and Y from initialPosition
           cameraRef.current.position.set(initialPosition[0], initialPosition[1], fromZ)
-          cameraRef.current.lookAt(lookAtTargetRef.current)
+          applyLookAt()
         }
       },
 
@@ -147,11 +159,13 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
       },
 
       setMouseSmoothing: (smoothing: number) => {
-        mouseSmoothingRef.current = smoothing
+        const clamped = Math.max(0, Math.min(1, smoothing))
+        mouseSmoothingRef.current = clamped
       },
 
       setCameraLerpFactor: (factor: number) => {
-        cameraLerpFactorRef.current = factor
+        const clamped = Math.max(0, Math.min(1, factor))
+        cameraLerpFactorRef.current = clamped
       },
 
       setPosition: (x: number, y: number, z: number) => {
@@ -166,9 +180,7 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
 
       lookAt: (x: number, y: number, z: number) => {
         lookAtTargetRef.current.set(x, y, z)
-        if (cameraRef.current) {
-          cameraRef.current.lookAt(lookAtTargetRef.current)
-        }
+        applyLookAt()
       },
 
       resetPosition: () => {
@@ -184,23 +196,56 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
       getCurrentMode: () => modeRef.current,
     }))
 
-    // Initialize camera
+    // Update camera projection when FOV changes (do not touch position)
     useEffect(() => {
       if (cameraRef.current) {
         cameraRef.current.fov = fov
         cameraRef.current.updateProjectionMatrix()
-        cameraRef.current.position.set(...initialPosition)
-        cameraRef.current.lookAt(lookAtTargetRef.current)
       }
-    }, [fov, initialPosition])
+    }, [fov])
+
+    // Set initial position and targets on mount only to avoid resets during runtime
+    useEffect(() => {
+      if (cameraRef.current) {
+        cameraRef.current.position.set(...initialPosition)
+        basePositionRef.current.set(...initialPosition)
+        targetPositionRef.current.set(...initialPosition)
+        currentPositionRef.current.set(...initialPosition)
+        applyLookAt()
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     // Update lookAt target when prop changes
     useEffect(() => {
       lookAtTargetRef.current.set(...lookAtTarget)
-      if (cameraRef.current) {
-        cameraRef.current.lookAt(lookAtTargetRef.current)
-      }
+      applyLookAt()
     }, [lookAtTarget])
+
+    // Sync prop updates to refs
+    useEffect(() => {
+      mouseEnabledRef.current = mouseEnabled
+      if (modeRef.current !== "animating") {
+        modeRef.current = mouseEnabled ? "mouse" : "idle"
+      }
+    }, [mouseEnabled])
+
+    useEffect(() => {
+      mouseLimitsRef.current.x = mouseLimitX
+      mouseLimitsRef.current.y = mouseLimitY
+    }, [mouseLimitX, mouseLimitY])
+
+    useEffect(() => {
+      mouseSensitivityRef.current = mouseSensitivity
+    }, [mouseSensitivity])
+
+    useEffect(() => {
+      mouseSmoothingRef.current = Math.max(0, Math.min(1, mouseSmoothing ?? 0))
+    }, [mouseSmoothing])
+
+    useEffect(() => {
+      cameraLerpFactorRef.current = Math.max(0, Math.min(1, cameraLerpFactor ?? 0))
+    }, [cameraLerpFactor])
 
     // Main update loop
     useFrame(() => {
@@ -210,7 +255,7 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
 
       if (mode === "animating") {
         // Handle animation
-        const elapsed = (Date.now() - animationStartTimeRef.current) / 1000
+        const elapsed = (performance.now() - animationStartTimeRef.current) / 1000
         const progress = Math.min(elapsed / animationDurationRef.current, 1.0)
 
         if (progress >= 1.0) {
@@ -220,7 +265,7 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
 
           // Update lookAt target to match camera Y position to avoid downward rotation
           lookAtTargetRef.current.set(0, initialPosition[1], 0)
-          cameraRef.current.lookAt(lookAtTargetRef.current)
+          applyLookAt()
 
           // Update base position for potential mouse control
           basePositionRef.current.set(initialPosition[0], initialPosition[1], finalZ)
@@ -242,7 +287,7 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
 
           // Update lookAt target to match camera Y position during animation
           lookAtTargetRef.current.set(0, initialPosition[1], 0)
-          cameraRef.current.lookAt(lookAtTargetRef.current)
+          applyLookAt()
         }
       } else if (mode === "mouse" && mouseEnabledRef.current) {
         // Handle mouse movement
@@ -269,7 +314,7 @@ export const UnifiedCamera = forwardRef<UnifiedCameraRef, UnifiedCameraProps>(
       }
 
       // Always maintain look at target
-      cameraRef.current.lookAt(lookAtTargetRef.current)
+      applyLookAt()
     })
 
     return <DreiPerspectiveCamera ref={cameraRef} makeDefault fov={fov} near={near} far={far} />
