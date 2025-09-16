@@ -7,6 +7,7 @@ import cn from "clsx"
 import gsap from "gsap"
 import { ScrollTrigger } from "gsap/ScrollTrigger"
 import { folder, useControls } from "leva"
+import { ArrowRightCircle } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import Link from "next/link"
 import { Suspense, useEffect, useRef, useState } from "react"
@@ -281,12 +282,17 @@ function useSlideTracking(slideCount: number, getProgress: () => number, trigger
 function CameraController({ camX, camY, camZ, fov }: { camX: number; camY: number; camZ: number; fov: number }) {
   const { camera, pointer } = useThree()
   const vec = new THREE.Vector3()
+  const smoothPointer = useRef({ x: 0, y: 0 })
 
   useFrame(() => {
+    // Use smoothed pointer values to prevent jitter from HTML interactions
+    smoothPointer.current.x += (pointer.x - smoothPointer.current.x) * 0.05
+    smoothPointer.current.y += (pointer.y - smoothPointer.current.y) * 0.05
+
     // Apply mouse parallax effect on top of base camera position
-    const mouseX = pointer.x * 0.05
-    const mouseY = pointer.y * 0.05
-    camera.position.lerp(vec.set(camX + mouseX, camY + mouseY, camZ), 0.1)
+    const mouseX = smoothPointer.current.x * 0.05
+    const mouseY = smoothPointer.current.y * 0.05
+    camera.position.lerp(vec.set(camX + mouseX, camY + mouseY, camZ), 1.9)
 
     const persp = camera as THREE.PerspectiveCamera
     persp.fov = fov
@@ -549,8 +555,8 @@ export function BarrelCarousel() {
         <AdaptiveDpr pixelated />
         <Stats />
         <CameraController camX={params.camX} camY={params.camY} camZ={params.camZ} fov={params.fov} />
-        <Html fullscreen pointerEvents='none'>
-          <div className='absolute top-4/12 left-48 z-50'>
+        <Html fullscreen pointerEvents='auto'>
+          <Link href={ITEMS[currentSlide].link} className='absolute top-4/12 left-48 z-50'>
             <AnimatePresence mode='wait'>
               <motion.div
                 key={currentSlide}
@@ -558,18 +564,21 @@ export function BarrelCarousel() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, ease: "easeInOut" }}
-                className='flex flex-col gap-1'
+                className='flex flex-col gap-1  group'
               >
-                <div className='text-white text-2xl font-bold'>{ITEMS[currentSlide].title}</div>
-                <Link href={ITEMS[currentSlide].link} className='text-white text-sm font-bold'>
-                  GO TO PROJECT
-                </Link>
+                <div className='text-white text-2xl font-bold group-hover:text-amber-200 transition-colors'>
+                  {ITEMS[currentSlide].title}
+                </div>
+                <div className='text-white text-sm font-bold flex items-center gap-2 group-hover:text-amber-200 transition-colors'>
+                  <span>GO TO PROJECT</span>
+                  <ArrowRightCircle className='w-4 h-4' />
+                </div>
                 {/* <div className='text-white text-sm'>
                   {currentSlide + 1} / {ITEMS.length}
                 </div> */}
               </motion.div>
             </AnimatePresence>
-          </div>
+          </Link>
         </Html>
       </Canvas>
     </div>
